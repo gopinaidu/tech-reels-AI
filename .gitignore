@@ -1,0 +1,112 @@
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Test / lint / type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# -----------------------------
+# Secrets / environment
+# -----------------------------
+.env
+.env.*
+!.env.example
+
+# API keys / credentials / OAuth
+credentials*.json
+client_secret*.json
+token*.json
+oauth*.json
+secrets*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# -----------------------------
+# ReelAgent generated/runtime data
+# -----------------------------
+output/
+outputs/
+generated/
+renders/
+rendered/
+media/
+audio/
+video/
+videos/
+thumbnails/
+captions/
+tmp/
+temp/
+cache/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# -----------------------------
+# Node / Remotion
+# -----------------------------
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+.next/
+out/
+
+# -----------------------------
+# IDEs / editors
+# -----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# -----------------------------
+# OS
+# -----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -----------------------------
+# Docker / local overrides
+# -----------------------------
+docker-compose.override.yml
+
+# -----------------------------
+# Misc local files
+# -----------------------------
+.local/
+scratch/
