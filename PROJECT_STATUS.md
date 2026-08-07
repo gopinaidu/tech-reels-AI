@@ -36,18 +36,22 @@ Source-control foundation is also in place:
 
 **Application code:** Not started yet.
 
+## Engineering Foundation Progress
+
+1. Establish repository/project layout — **COMPLETE ✅**
+   - Initial modular-monolith layout documented in `docs/PROJECT_STRUCTURE.md`.
+   - First vertical slice intentionally limited to Python tooling, typed configuration, FastAPI health endpoint, and tests.
+2. Establish Python tooling and typed configuration — **NEXT**
+3. Add FastAPI application skeleton and health check — Pending
+4. Add initial domain models/interfaces for topic discovery — Pending
+5. Add tests and quality tooling required by Level 1 readiness — Pending
+6. Run an independent code review before treating the slice as complete — Pending
+
 ## Next Milestone
 
 Build the first development-ready ReelAgent skeleton and prove the smallest vertical slice without prematurely implementing the full reel pipeline.
 
-Initial engineering sequence:
-
-1. Establish repository/project layout.
-2. Establish Python tooling and typed configuration.
-3. Add FastAPI application skeleton and health check.
-4. Add initial domain models/interfaces for topic discovery.
-5. Add tests and quality tooling required by Level 1 readiness.
-6. Run an independent code review before treating the slice as complete.
+The next engineering step is to establish Python project/tooling configuration and the centralized typed configuration boundary. No LLM, database, discovery, publishing, or rendering integration is needed yet.
 
 ## Open Decisions That Do Not Block Initial Coding
 
