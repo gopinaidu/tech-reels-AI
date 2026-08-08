@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from typing import TypedDict, cast
 
 import httpx
+from pydantic import HttpUrl
 
 from reelagent.topics.models import DiscoveryQuery, SourceEvidence, SourceKind, TopicCandidate
 
@@ -97,12 +98,11 @@ class HackerNewsDiscoverySource:
         item_id = item.get("id")
         title = item.get("title")
         timestamp = item.get("time")
-        required_fields_are_valid = (
-            isinstance(item_id, int)
-            and isinstance(title, str)
-            and isinstance(timestamp, int)
-        )
-        if not required_fields_are_valid:
+        if (
+            not isinstance(item_id, int)
+            or not isinstance(title, str)
+            or not isinstance(timestamp, int)
+        ):
             return None
 
         published_at = datetime.fromtimestamp(timestamp, tz=UTC)
@@ -112,7 +112,7 @@ class HackerNewsDiscoverySource:
         source = SourceEvidence(
             source_name="Hacker News",
             source_kind=SourceKind.HACKER_NEWS,
-            url=_HN_DISCUSSION_URL.format(item_id=item_id),
+            url=HttpUrl(_HN_DISCUSSION_URL.format(item_id=item_id)),
             external_id=str(item_id),
             published_at=published_at,
         )
