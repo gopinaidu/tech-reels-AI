@@ -12,9 +12,12 @@ All project changes must go through a feature branch and pull request before the
 3. Commit changes only to that branch. Do not commit directly to `main`.
 4. Push the branch and open a pull request targeting `main`.
 5. CI must pass before merge.
-6. Perform the required human and/or independent LLM review described in `CODE_READINESS.md` and `LLM_REVIEW_POLICY.md`.
-7. Resolve blocking review findings on the same branch and let CI run again.
-8. Merge only after the change is approved and no blocking findings remain.
+6. Every code PR must receive an independent peer review before merge.
+   - Default reviewer: CodeRabbit on the GitHub PR.
+   - CodeRabbit findings are review input, not automatic truth; blocking findings must be fixed or explicitly accepted by the project owner.
+   - If CodeRabbit is unavailable, a separate Claude or Gemini review using `LLM_REVIEW_POLICY.md` is required and its findings must be recorded on the PR.
+7. Resolve blocking review findings on the same branch and let CI and peer review run again as needed.
+8. Merge only after the project owner approves the change and no unresolved blocking findings remain.
 
 ## Pull Request Scope
 
@@ -35,6 +38,6 @@ The PR should make it easy to answer:
 - What changed and why?
 - What tests or checks ran?
 - Did CI pass?
-- Is independent LLM review required?
-- Were any review findings accepted or fixed?
+- Did the independent peer reviewer complete its review?
+- Which blocking findings were fixed or explicitly accepted?
 - Are documentation or decisions affected?
