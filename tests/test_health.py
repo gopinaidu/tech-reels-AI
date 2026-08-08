@@ -1,7 +1,5 @@
 from fastapi.testclient import TestClient
-
 from reelagent.app import app
-
 
 client = TestClient(app)
 
