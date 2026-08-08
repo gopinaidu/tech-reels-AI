@@ -69,7 +69,10 @@ class HackerNewsDiscoverySource:
         response = await client.get("topstories.json")
         response.raise_for_status()
         payload = response.json()
-        if not isinstance(payload, list) or not all(isinstance(item_id, int) for item_id in payload):
+        valid_payload = isinstance(payload, list) and all(
+            isinstance(item_id, int) for item_id in payload
+        )
+        if not valid_payload:
             raise ValueError("topstories response must be a list of integer ids")
         return cast(list[int], payload)
 
@@ -94,7 +97,12 @@ class HackerNewsDiscoverySource:
         item_id = item.get("id")
         title = item.get("title")
         timestamp = item.get("time")
-        if not isinstance(item_id, int) or not isinstance(title, str) or not isinstance(timestamp, int):
+        required_fields_are_valid = (
+            isinstance(item_id, int)
+            and isinstance(title, str)
+            and isinstance(timestamp, int)
+        )
+        if not required_fields_are_valid:
             return None
 
         published_at = datetime.fromtimestamp(timestamp, tz=UTC)
