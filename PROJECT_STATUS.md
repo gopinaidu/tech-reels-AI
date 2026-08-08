@@ -41,22 +41,36 @@ Source-control foundation is also in place:
 1. Establish repository/project layout — **COMPLETE ✅**
    - Initial modular-monolith layout documented in `docs/PROJECT_STRUCTURE.md`.
    - First vertical slice intentionally limited to Python tooling, typed configuration, FastAPI health endpoint, and tests.
-2. Establish Python tooling and typed configuration — **IMPLEMENTED; FINAL TOOLING VERIFICATION PENDING 🟡**
+2. Establish Python tooling and typed configuration — **COMPLETE ✅**
    - `pyproject.toml` added with Python 3.12+, packaging, pytest, Ruff, and mypy configuration.
    - Centralized typed settings added in `src/reelagent/config.py` using Pydantic Settings.
    - Secret-bearing values use `SecretStr`.
    - `.env.example` aligned with the typed settings surface.
    - Configuration tests added in `tests/test_config.py`.
-   - Configuration tests were executed against the same source in an isolated local verification environment: 2 passed.
-   - Ruff and mypy still need to run against the repository checkout/CI before Step 2 is marked complete.
+   - GitHub Actions workflow added at `.github/workflows/ci.yml`.
+   - CI verifies installation plus Ruff, mypy, and pytest on pushes and pull requests to `main`.
+   - First CI run passed all quality checks on 2026-08-08.
 3. Add FastAPI application skeleton and health check — **NEXT**
 4. Add initial domain models/interfaces for topic discovery — Pending
 5. Add tests and quality tooling required by Level 1 readiness — Pending
 6. Run an independent code review before treating the slice as complete — Pending
 
+## Continuous Integration
+
+**Status: ACTIVE ✅**
+
+The repository now has an automatic Python quality gate for pushes and pull requests to `main`:
+
+- Install project and development dependencies
+- Ruff lint checks
+- mypy strict type checks
+- pytest test suite
+
+A failed quality check should be treated as a blocking signal for the affected change rather than ignored.
+
 ## Next Milestone
 
-Complete tooling verification, then add the minimal FastAPI application skeleton and health endpoint. No LLM, database, discovery, publishing, or rendering integration is needed yet.
+Add the minimal FastAPI application skeleton and health endpoint. No LLM, database, discovery, publishing, or rendering integration is needed yet.
 
 ## Open Decisions That Do Not Block Initial Coding
 
