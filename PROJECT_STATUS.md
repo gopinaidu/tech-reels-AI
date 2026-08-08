@@ -34,30 +34,35 @@ Source-control foundation is also in place:
 
 ## Coding Status
 
-**Application code:** Engineering foundation started.
+**Application code:** First engineering slice implemented; independent review pending.
 
 ## Engineering Foundation Progress
 
 1. Establish repository/project layout — **COMPLETE ✅**
    - Initial modular-monolith layout documented in `docs/PROJECT_STRUCTURE.md`.
-   - First vertical slice intentionally limited to Python tooling, typed configuration, FastAPI health endpoint, and tests.
 2. Establish Python tooling and typed configuration — **COMPLETE ✅**
    - `pyproject.toml` added with Python 3.12+, packaging, pytest, Ruff, and mypy configuration.
    - Centralized typed settings added in `src/reelagent/config.py` using Pydantic Settings.
    - Secret-bearing values use `SecretStr`.
    - `.env.example` aligned with the typed settings surface.
-   - Configuration tests added in `tests/test_config.py`.
-   - GitHub Actions workflow added at `.github/workflows/ci.yml`.
-   - CI verifies installation plus Ruff, mypy, and pytest on pushes and pull requests to `main`.
 3. Add FastAPI application skeleton and health check — **COMPLETE ✅**
    - Minimal FastAPI application added in `src/reelagent/app.py`.
    - `/health` returns `{ "status": "ok" }`.
    - Health endpoint test added in `tests/test_health.py`.
-   - FastAPI and HTTPX dependencies added to `pyproject.toml`.
-   - GitHub Actions verified Ruff, mypy, and pytest successfully on 2026-08-08.
-4. Add initial domain models/interfaces for topic discovery — **NEXT**
-5. Add tests and quality tooling required by Level 1 readiness — Pending
-6. Run an independent code review before treating the slice as complete — Pending
+4. Add initial domain models/interfaces for topic discovery — **COMPLETE ✅**
+   - `src/reelagent/topics/models.py` defines immutable source evidence, topic candidate, source-kind, and bounded discovery-query models.
+   - Discovery and publication timestamps used at this boundary must be timezone-aware.
+   - Source provenance is retained with each topic candidate.
+   - `src/reelagent/topics/ports.py` defines the async provider-neutral `TopicDiscoverySource` protocol.
+   - No source-specific adapter has been implemented; D-025 remains the gate for that work.
+5. Add tests and quality tooling required by Level 1 readiness — **COMPLETE ✅**
+   - Configuration, health endpoint, validation happy paths, timestamp error paths, and discovery limit bounds are tested.
+   - GitHub Actions installs the project and runs Ruff, mypy strict, and pytest on pushes and pull requests.
+   - Latest first-slice CI run passed all quality gates on 2026-08-08.
+   - No external side effects, database dependencies, provider calls, or logging-worthy runtime workflow exist in this slice.
+6. Run an independent code review before treating the slice as complete — **PENDING 🟡**
+   - Review packet prepared at `docs/reviews/FIRST_SLICE_REVIEW_PACKET.md`.
+   - A second model should review the implementation against `LLM_REVIEW_POLICY.md` before this slice is accepted as the Development-Ready baseline.
 
 ## Continuous Integration
 
@@ -72,13 +77,19 @@ The repository has an automatic Python quality gate for pushes and pull requests
 
 A failed quality check is a blocking signal for the affected change rather than something to ignore.
 
-## Next Milestone
+## Current Gate
 
-Define the initial provider-neutral topic discovery domain model and adapter interface. Do not implement external discovery adapters yet; D-025 must be resolved before source-specific adapter implementation.
+**Independent review of the first engineering slice.**
 
-## Open Decisions That Do Not Block Initial Coding
+Use `docs/reviews/FIRST_SLICE_REVIEW_PACKET.md` with Claude, Gemini, or another independent capable model. Resolve or explicitly accept any Critical/High findings before advancing beyond the foundation slice.
 
-The decision log contains open items that should remain explicit rather than silently resolved during implementation. In particular, current publishing, cost, disclosure, and discovery-access decisions must be resolved before the work they block begins.
+## What Comes After Review
+
+Once the first slice is accepted, the next product-facing work should address the discovery source feasibility spike in D-025 before implementing real discovery adapters.
+
+## Open Decisions
+
+The decision log contains open items that remain explicit rather than silently resolved during implementation. Publishing, cost, disclosure, and discovery-access decisions must be resolved before the work they block begins.
 
 Refer to `DECISIONS.md` for the authoritative list and blocking relationships.
 
