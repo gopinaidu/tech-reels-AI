@@ -27,6 +27,16 @@ def test_topic_candidate_accepts_timezone_aware_timestamps() -> None:
     assert candidate.source.published_at == published_at
 
 
+def test_source_evidence_rejects_naive_publication_timestamp() -> None:
+    with pytest.raises(ValidationError, match="published_at must be timezone-aware"):
+        SourceEvidence(
+            source_name="Example Project",
+            source_kind=SourceKind.OFFICIAL,
+            url="https://example.com/releases/1",
+            published_at=datetime(2026, 8, 8, 10, 0),
+        )
+
+
 def test_topic_candidate_rejects_naive_discovery_timestamp() -> None:
     source = SourceEvidence(
         source_name="Example Project",
@@ -49,3 +59,8 @@ def test_discovery_query_enforces_limit_bounds() -> None:
 
     with pytest.raises(ValidationError):
         DiscoveryQuery(limit=101)
+
+
+def test_discovery_query_rejects_naive_since_timestamp() -> None:
+    with pytest.raises(ValidationError, match="since must be timezone-aware"):
+        DiscoveryQuery(since=datetime(2026, 8, 8, 9, 0))
