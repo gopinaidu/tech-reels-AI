@@ -2,7 +2,7 @@
 
 ## Purpose
 
-ReelAgent intentionally uses multiple LLMs as independent reviewers, including ChatGPT, Claude, Gemini, and future capable models.
+ReelAgent intentionally uses multiple LLMs as independent reviewers, including ChatGPT, Claude, Gemini, CodeRabbit, and future capable models.
 
 The goal is to reduce blind spots, not to manufacture consensus.
 
@@ -17,9 +17,29 @@ Evaluates independently and tries to find problems rather than confirm the propo
 ### Project Owner
 Makes the final call on material tradeoffs.
 
-## Mandatory Independent Review
+## Baseline Peer Review For Every Code PR
 
-Use a second LLM for:
+Every pull request containing application, infrastructure, workflow, or test code must receive an independent AI peer review before merge.
+
+Default implementation:
+
+- CodeRabbit reviews the GitHub pull request automatically.
+- The reviewer must be independent of the primary implementation pass.
+- Critical, High, or otherwise blocking findings must be fixed or explicitly accepted by the project owner.
+- After material fixes, the reviewer should re-evaluate the updated diff.
+- CI and automated tests remain mandatory; peer review does not replace them.
+
+Fallback when CodeRabbit is unavailable:
+
+- Run the Standard Code Review Prompt below through a separate Claude or Gemini session.
+- Provide the PR diff and relevant ReelAgent governance context.
+- Record the reviewer, findings, disposition, and any accepted risk on the pull request before merge.
+
+Documentation-only typo/copy changes may skip the baseline peer review when they cannot change behavior, governance, security, architecture, or operational meaning.
+
+## Mandatory Additional Independent Review
+
+In addition to the baseline code-PR peer review, use a second LLM review for:
 
 - Major architectural decisions
 - New infrastructure/platform dependencies
@@ -39,7 +59,7 @@ Use a second LLM for:
 
 ## Optional Review
 
-Usually unnecessary for naming cleanup, simple CRUD, copy changes, straightforward tests, documentation typos, and behavior-preserving small refactors.
+Additional review beyond the baseline peer-review gate is usually unnecessary for naming cleanup, simple CRUD, copy changes, straightforward tests, documentation typos, and behavior-preserving small refactors.
 
 ## Required Review Packet
 
@@ -87,6 +107,8 @@ Do not recommend additional infrastructure unless it solves a stated problem."
 "You are an independent senior engineer reviewing ReelAgent code.
 
 Review for functional correctness, edge cases, exception handling, security, concurrency, data integrity, idempotency, approval/artifact integrity, API misuse, LLM output validation, tests, observability, proprietary-information risk, unnecessary complexity, and cost impact.
+
+For Python changes, explicitly check typing, async behavior, resource lifecycle, exception boundaries, mutable/default-state hazards, library/API misuse, and tests that may falsely pass despite broken behavior.
 
 Do not praise the code generically.
 
