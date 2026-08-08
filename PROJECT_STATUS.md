@@ -1,6 +1,6 @@
 # ReelAgent Project Status
 
-**Last updated:** 2026-08-07
+**Last updated:** 2026-08-08
 
 ## Current Phase
 
@@ -34,24 +34,29 @@ Source-control foundation is also in place:
 
 ## Coding Status
 
-**Application code:** Not started yet.
+**Application code:** Engineering foundation started.
 
 ## Engineering Foundation Progress
 
 1. Establish repository/project layout — **COMPLETE ✅**
    - Initial modular-monolith layout documented in `docs/PROJECT_STRUCTURE.md`.
    - First vertical slice intentionally limited to Python tooling, typed configuration, FastAPI health endpoint, and tests.
-2. Establish Python tooling and typed configuration — **NEXT**
-3. Add FastAPI application skeleton and health check — Pending
+2. Establish Python tooling and typed configuration — **IMPLEMENTED; FINAL TOOLING VERIFICATION PENDING 🟡**
+   - `pyproject.toml` added with Python 3.12+, packaging, pytest, Ruff, and mypy configuration.
+   - Centralized typed settings added in `src/reelagent/config.py` using Pydantic Settings.
+   - Secret-bearing values use `SecretStr`.
+   - `.env.example` aligned with the typed settings surface.
+   - Configuration tests added in `tests/test_config.py`.
+   - Configuration tests were executed against the same source in an isolated local verification environment: 2 passed.
+   - Ruff and mypy still need to run against the repository checkout/CI before Step 2 is marked complete.
+3. Add FastAPI application skeleton and health check — **NEXT**
 4. Add initial domain models/interfaces for topic discovery — Pending
 5. Add tests and quality tooling required by Level 1 readiness — Pending
 6. Run an independent code review before treating the slice as complete — Pending
 
 ## Next Milestone
 
-Build the first development-ready ReelAgent skeleton and prove the smallest vertical slice without prematurely implementing the full reel pipeline.
-
-The next engineering step is to establish Python project/tooling configuration and the centralized typed configuration boundary. No LLM, database, discovery, publishing, or rendering integration is needed yet.
+Complete tooling verification, then add the minimal FastAPI application skeleton and health endpoint. No LLM, database, discovery, publishing, or rendering integration is needed yet.
 
 ## Open Decisions That Do Not Block Initial Coding
 
