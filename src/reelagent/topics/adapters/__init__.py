@@ -1,0 +1,1 @@
+"""External topic discovery adapters."""
