@@ -49,9 +49,13 @@ Source-control foundation is also in place:
    - Configuration tests added in `tests/test_config.py`.
    - GitHub Actions workflow added at `.github/workflows/ci.yml`.
    - CI verifies installation plus Ruff, mypy, and pytest on pushes and pull requests to `main`.
-   - First CI run passed all quality checks on 2026-08-08.
-3. Add FastAPI application skeleton and health check — **NEXT**
-4. Add initial domain models/interfaces for topic discovery — Pending
+3. Add FastAPI application skeleton and health check — **COMPLETE ✅**
+   - Minimal FastAPI application added in `src/reelagent/app.py`.
+   - `/health` returns `{ "status": "ok" }`.
+   - Health endpoint test added in `tests/test_health.py`.
+   - FastAPI and HTTPX dependencies added to `pyproject.toml`.
+   - GitHub Actions verified Ruff, mypy, and pytest successfully on 2026-08-08.
+4. Add initial domain models/interfaces for topic discovery — **NEXT**
 5. Add tests and quality tooling required by Level 1 readiness — Pending
 6. Run an independent code review before treating the slice as complete — Pending
 
@@ -59,18 +63,18 @@ Source-control foundation is also in place:
 
 **Status: ACTIVE ✅**
 
-The repository now has an automatic Python quality gate for pushes and pull requests to `main`:
+The repository has an automatic Python quality gate for pushes and pull requests to `main`:
 
 - Install project and development dependencies
 - Ruff lint checks
 - mypy strict type checks
 - pytest test suite
 
-A failed quality check should be treated as a blocking signal for the affected change rather than ignored.
+A failed quality check is a blocking signal for the affected change rather than something to ignore.
 
 ## Next Milestone
 
-Add the minimal FastAPI application skeleton and health endpoint. No LLM, database, discovery, publishing, or rendering integration is needed yet.
+Define the initial provider-neutral topic discovery domain model and adapter interface. Do not implement external discovery adapters yet; D-025 must be resolved before source-specific adapter implementation.
 
 ## Open Decisions That Do Not Block Initial Coding
 
