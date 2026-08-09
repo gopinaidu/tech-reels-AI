@@ -24,43 +24,49 @@ class HackerNewsDiscoveryCoordinator:
 
     async def discover(self) -> list[TopicCandidate]:
         since = datetime.now(UTC) - timedelta(days=self.settings.hn_targeted_freshness_days)
-        tasks = []
+        trending: list[TopicCandidate] = []
         if self.settings.hn_trending_limit:
-            tasks.append(
-                self.trending_source.discover(
-                    DiscoveryQuery(limit=self.settings.hn_trending_limit, since=since)
-                )
+            trending = await self.trending_source.discover(
+                DiscoveryQuery(limit=self.settings.hn_trending_limit, since=since)
             )
 
-        for group, terms in self.settings.discovery_topic_groups.items():
-            for term in terms:
-                source = HackerNewsSearchSource(
-                    search_term=term,
-                    topic_group=group,
-                    min_points=self.settings.hn_targeted_min_points,
-                    min_comments=self.settings.hn_targeted_min_comments,
-                )
-                tasks.append(
-                    source.discover(
-                        DiscoveryQuery(
-                            limit=self.settings.hn_targeted_limit_per_query,
-                            since=since,
-                        )
+        semaphore = asyncio.Semaphore(self.settings.hn_targeted_max_concurrency)
+
+        async def run_targeted(group: str, term: str) -> list[TopicCandidate]:
+            source = HackerNewsSearchSource(
+                search_term=term,
+                topic_group=group,
+                min_points=self.settings.hn_targeted_min_points,
+                min_comments=self.settings.hn_targeted_min_comments,
+            )
+            async with semaphore:
+                return await source.discover(
+                    DiscoveryQuery(
+                        limit=self.settings.hn_targeted_limit_per_query,
+                        since=since,
                     )
                 )
 
-        result_sets = await asyncio.gather(*tasks)
-        unique: dict[str, TopicCandidate] = {}
-        for candidates in result_sets:
+        tasks = [
+            run_targeted(group, term)
+            for group, terms in self.settings.discovery_topic_groups.items()
+            for term in terms
+        ]
+        targeted_sets = await asyncio.gather(*tasks) if tasks else []
+
+        trending_by_key = {build_dedupe_key(candidate): candidate for candidate in trending}
+        targeted_by_key: dict[str, TopicCandidate] = {}
+        for candidates in targeted_sets:
             for candidate in candidates:
                 key = build_dedupe_key(candidate)
-                existing = unique.get(key)
-                if existing is None:
-                    unique[key] = candidate
+                if key in trending_by_key:
                     continue
-                if _candidate_signal(candidate) > _candidate_signal(existing):
-                    unique[key] = candidate
-        return list(unique.values())
+                existing = targeted_by_key.get(key)
+                if existing is None or _candidate_signal(candidate) > _candidate_signal(existing):
+                    targeted_by_key[key] = candidate
+
+        targeted = sorted(targeted_by_key.values(), key=_candidate_signal, reverse=True)
+        return trending + targeted[: self.settings.hn_targeted_total_limit]
 
 
 def _candidate_signal(candidate: TopicCandidate) -> tuple[int, int]:
