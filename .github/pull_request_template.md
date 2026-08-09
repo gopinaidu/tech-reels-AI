@@ -20,6 +20,7 @@ Describe what changed and why.
 - [ ] Change is small and focused
 - [ ] No direct-to-main development occurred
 - [ ] Material architecture changes received the additional independent review required by `LLM_REVIEW_POLICY.md`
+- [ ] Project owner explicitly authorized the merge (formal self-approval is not required for owner-authored PRs)
 
 ## Project Impact
 
