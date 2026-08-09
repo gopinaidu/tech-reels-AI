@@ -25,6 +25,8 @@ class _HackerNewsItem(TypedDict, total=False):
     dead: bool
     title: str
     url: str
+    score: int
+    descendants: int
 
 
 class HackerNewsDiscoverySource:
@@ -57,8 +59,13 @@ class HackerNewsDiscoverySource:
             raise HackerNewsDiscoveryError("Hacker News discovery failed") from exc
 
         candidates: list[TopicCandidate] = []
-        for item in items:
-            candidate = self._to_candidate(item, discovered_at=discovered_at, query=query)
+        for rank, item in enumerate(items, start=1):
+            candidate = self._to_candidate(
+                item,
+                discovered_at=discovered_at,
+                query=query,
+                rank=rank,
+            )
             if candidate is not None:
                 candidates.append(candidate)
             if len(candidates) >= query.limit:
@@ -91,6 +98,7 @@ class HackerNewsDiscoverySource:
         *,
         discovered_at: datetime,
         query: DiscoveryQuery,
+        rank: int,
     ) -> TopicCandidate | None:
         if item.get("deleted") or item.get("dead") or item.get("type") != "story":
             return None
@@ -115,6 +123,14 @@ class HackerNewsDiscoverySource:
             url=HttpUrl(_HN_DISCUSSION_URL.format(item_id=item_id)),
             external_id=str(item_id),
             published_at=published_at,
+            metadata={
+                "author": item.get("by"),
+                "points": item.get("score", 0),
+                "comment_count": item.get("descendants", 0),
+                "article_url": item.get("url"),
+                "hn_rank": rank,
+                "discovery_method": "trending",
+            },
         )
         return TopicCandidate(
             title=title,
