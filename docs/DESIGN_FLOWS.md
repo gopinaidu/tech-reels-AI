@@ -97,23 +97,7 @@ Every discovery source has its own payload shape, API semantics, identifiers, ti
 
 Adapters translate source-specific data into a provider-neutral `TopicCandidate` representation before the rest of ReelAgent sees it.
 
-Conceptually, a candidate contains fields such as:
-
-```text
-TopicCandidate
-- title
-- summary
-- canonical_url
-- source_type
-- source_name
-- external_id
-- published_at
-- discovered_at
-- tags
-- source/provenance metadata
-```
-
-The exact schema may evolve, but downstream scoring and research code should not need to understand Hacker News JSON, GitHub release payloads, RSS XML, or arXiv Atom directly.
+The current domain representation contains a title, summary, discovery timestamp, and typed source evidence including source kind, source name, URL, external ID, and publication timestamp. The schema can evolve without allowing source-specific payloads to leak into downstream stages.
 
 ## 2.2 Normalization
 
@@ -121,7 +105,6 @@ Normalization creates consistent internal values across providers.
 
 Examples:
 
-- normalize canonical URLs where safe
 - normalize timestamps to one timezone/representation
 - trim or bound source text
 - normalize source names and identifiers
@@ -134,108 +117,78 @@ Normalization must not invent missing factual content.
 
 The same underlying topic may appear across several sources.
 
-Example:
-
-```text
-Hacker News:  "Kafka introduces new queue semantics"
-GitHub:       "Apache Kafka 4.x released"
-Vendor blog:  "What's new in Kafka 4.x"
-Official:     "Kafka 4.x release notes"
-
-                    ↓
-
-       One logical topic candidate / cluster
-```
-
 For the MVP, prefer deterministic and explainable deduplication before adding embeddings or a vector database.
 
-Initial signals can include:
+The implemented first pass uses a normalized-title hash as a source-neutral dedupe key. This intentionally merges exact normalized title matches across different providers while retaining each provider observation as separate source provenance. It does not yet attempt semantic clustering of differently worded titles.
 
-- exact source + external ID
-- canonical URL equality
-- normalized URL equality
-- normalized title equality
-- bounded deterministic title similarity
-- stable dedupe/hash keys where appropriate
-
-When multiple sources refer to the same topic, do not simply discard the extra observations. Preserve source provenance so later scoring and research can see that the topic has multiple signals.
-
-LLM-based semantic clustering may be considered later if deterministic methods produce unacceptable duplicate rates.
+Future deterministic signals may include canonical URL equality and bounded title similarity. LLM-based semantic clustering may be considered later only if deterministic methods produce unacceptable duplicate rates.
 
 ## 2.4 Persistence
 
 Discovery results must survive process restarts and repeated discovery runs.
 
-Persistence allows ReelAgent to know that a topic was already:
+The current persistence boundary is SQLAlchemy with PostgreSQL as the intended system of record. Domain models remain separate from ORM rows so business logic does not become coupled to database details.
 
-- discovered
-- scored
-- rejected
-- selected
-- researched
-- converted into a reel
-
-This prevents repeated API work and repeated paid LLM work.
-
-A likely conceptual model is:
+Current physical model:
 
 ```text
 topic_candidate
 ---------------
 id
 title
-canonical_url
+summary
+normalized_title
+dedupe_key
+discovered_at
+created_at
+
+        1
+        │
+        └────── *
+
+topic_source
+------------
+id
+topic_candidate_id
+source_name
+source_kind
+url
+external_id
 published_at
 discovered_at
-status
-dedupe_key
-signal_score
-
-candidate_source
-----------------
-candidate_id
-source_name
-source_url
-external_id
-source_metadata
 ```
 
-This is conceptual design, not a committed physical schema. The actual schema should be recorded in `DECISIONS.md` when chosen.
+Multiple `topic_source` rows can point to one logical topic candidate. This preserves evidence that the same topic was observed from more than one source instead of discarding duplicates.
 
-## 2.5 Prepare for Scoring / Selection
+Large media is not stored in PostgreSQL; see D-026.
+
+## 2.5 Repository Boundary
+
+Application code persists candidates through a repository abstraction/implementation rather than scattering SQLAlchemy queries through adapters and workflow code.
+
+Current implementation:
+
+```text
+TopicCandidate
+      ↓
+SqlAlchemyTopicCandidateRepository
+      ↓
+SQLAlchemy Session
+      ↓
+PostgreSQL
+```
+
+The Hacker News adapter remains unaware of SQLAlchemy and PostgreSQL.
+
+## 2.6 Prepare for Scoring / Selection
 
 Discovery should produce a candidate pool, not automatically generate reels.
 
-Scoring is a separate stage that may evaluate dimensions such as:
-
-- audience fit
-- freshness
-- technical depth
-- practical usefulness
-- source credibility
-- novelty
-- fit for one of ReelAgent's content formats
-- strength of multi-source interest signals
-- proprietary-information risk
-- expected research/generation cost
-
-Example:
-
-```text
-Candidate: Kafka new queue semantics
-Freshness:        high
-Audience fit:     high
-Technical depth:  high
-Source quality:   high
-Novelty:          high
-
-                 ↓
-             SELECT
-```
+Scoring is a separate stage that may evaluate audience fit, freshness, technical depth, practical usefulness, source credibility, novelty, format fit, multi-source interest, proprietary-information risk, and expected cost.
 
 The first scoring implementation should remain simple and explainable. Use deterministic rules where sufficient and reserve LLM judgment for dimensions that genuinely require semantic evaluation.
 
-## 2.6 Discovery Is Not Verification
+## 2.7 Discovery Is Not Verification
 
 A high-ranking discovery item means only that the topic may be worth investigating.
 
@@ -243,7 +196,7 @@ Community posts, headlines, blog posts, and source descriptions must not become 
 
 The downstream research stage must independently verify material claims using the evidence hierarchy in `AGENTS.md` and the retrieved-content protections in D-023.
 
-## 2.7 Failure Behavior
+## 2.8 Failure Behavior
 
 Discovery failures should be isolated by source when possible.
 
@@ -255,9 +208,11 @@ Examples:
 - Retries must be bounded and must respect provider limits.
 - Successfully normalized/persisted candidates should not be lost because another source fails later in the run.
 
-## 2.8 Current MVP Increment
+Database work uses transaction-scoped sessions that commit on success, roll back on failure, and always close the session.
 
-The first vertical slice is intentionally narrow:
+## 2.9 Current MVP Increment
+
+The current vertical slice is:
 
 ```text
 Hacker News
@@ -266,25 +221,23 @@ HackerNewsDiscoverySource
     ↓
 TopicCandidate
     ↓
-Normalization boundary
+Normalized-title dedupe key
     ↓
-Deterministic dedupe
+SqlAlchemyTopicCandidateRepository
     ↓
-Persistence boundary
+PostgreSQL persistence model
     ↓
 Tests
 ```
 
-Explicitly deferred from this increment:
+Explicitly deferred:
 
-- embeddings / vector database
-- LLM semantic clustering
+- semantic/embedding dedupe
+- vector database
 - broad multi-source orchestration
 - complex ranking models
 - automated research
 - publishing concerns
-
-The purpose is to prove a small, reliable discovery path before scaling the number of sources or adding model-driven decisions.
 
 ---
 
@@ -368,21 +321,7 @@ See D-010, D-013, and D-024.
 
 # 6. Future Flow Sections
 
-Add sections here as implementation reaches them, including:
-
-- source scheduling and discovery-run orchestration
-- topic lifecycle/status transitions
-- scoring and selection
-- research and claim verification
-- prompt/version management
-- script revision loops
-- narration and media generation
-- rendering
-- publication package construction
-- pre-publish safety review
-- artifact-bound approval
-- publishing and retry/idempotency
-- observability and cost accounting
+Add sections here as implementation reaches them, including source scheduling, topic lifecycle, scoring, research, prompt management, revision loops, narration, rendering, publication package construction, approval, publishing, observability, and cost accounting.
 
 Each new section should answer:
 
