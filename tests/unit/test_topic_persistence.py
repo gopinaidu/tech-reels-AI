@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import HttpUrl
 from sqlalchemy import create_engine
@@ -13,8 +13,14 @@ from reelagent.topics.persistence import (
 )
 
 
-def candidate(*, source_name: str, source_kind: SourceKind, url: str, external_id: str) -> TopicCandidate:
-    now = datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
+def candidate(
+    *,
+    source_name: str,
+    source_kind: SourceKind,
+    url: str,
+    external_id: str,
+) -> TopicCandidate:
+    now = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
     return TopicCandidate(
         title="  Kafka 4.2   Queue Semantics ",
         summary="A useful engineering topic.",
