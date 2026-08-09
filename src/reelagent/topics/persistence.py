@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, select
@@ -24,7 +24,7 @@ class TopicCandidateRow(Base):
     dedupe_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     sources: Mapped[list[TopicSourceRow]] = relationship(
