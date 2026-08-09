@@ -14,6 +14,24 @@ jobs:
     name: Python quality checks
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: reelagent
+          POSTGRES_PASSWORD: reelagent
+          POSTGRES_DB: reelagent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reelagent -d reelagent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://reelagent:reelagent@localhost:5432/reelagent
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -35,6 +53,9 @@ jobs:
 
       - name: Mypy
         run: mypy src
+
+      - name: Apply database migrations
+        run: alembic upgrade head
 
       - name: Pytest
         run: pytest
