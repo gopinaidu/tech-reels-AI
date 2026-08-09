@@ -10,8 +10,8 @@ Describe what changed and why.
 
 ## Independent Peer Review
 
-- [ ] CodeRabbit review completed for this code PR
-- [ ] If CodeRabbit was unavailable, Claude/Gemini fallback review was completed and recorded
+- [ ] OpenAI Codex review completed for this code PR
+- [ ] If Codex was unavailable, an independent fallback review was completed and recorded
 - [ ] Critical/High or otherwise blocking findings are resolved or explicitly accepted by the project owner
 - [ ] Review was rerun after material fixes when needed
 
