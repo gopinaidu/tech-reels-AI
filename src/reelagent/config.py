@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     )
     hn_trending_limit: int = Field(default=20, ge=0, le=100)
     hn_targeted_limit_per_query: int = Field(default=5, ge=1, le=25)
+    hn_targeted_total_limit: int = Field(default=40, ge=1, le=100)
+    hn_targeted_max_concurrency: int = Field(default=5, ge=1, le=10)
     hn_targeted_min_points: int = Field(default=10, ge=0)
     hn_targeted_min_comments: int = Field(default=5, ge=0)
     hn_targeted_freshness_days: int = Field(default=7, ge=1, le=30)
