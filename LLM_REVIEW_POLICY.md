@@ -2,20 +2,18 @@
 
 ## Purpose
 
-ReelAgent intentionally uses multiple LLMs as independent reviewers, including ChatGPT, Claude, Gemini, CodeRabbit, and future capable models.
-
-The goal is to reduce blind spots, not to manufacture consensus.
+ReelAgent uses independent AI reviewers to reduce blind spots without manufacturing consensus. OpenAI Codex is the default code-PR reviewer; Claude, Gemini, and other capable models remain useful for fallback and additional architecture review.
 
 ## Roles
 
 ### Primary Architect / Implementer
-Produces initial design, assumptions, options, recommendation, implementation where applicable, and test approach.
+Produces the initial design, assumptions, options, recommendation, implementation where applicable, and test approach.
 
 ### Independent Reviewer
-Evaluates independently and tries to find problems rather than confirm the proposal.
+Evaluates independently and tries to find problems rather than confirm the proposal. The reviewer should not be the same agent/session that performed the primary implementation pass.
 
 ### Project Owner
-Makes the final call on material tradeoffs.
+Makes the final call on material tradeoffs and accepts or rejects residual risk.
 
 ## Baseline Peer Review For Every Code PR
 
@@ -23,15 +21,15 @@ Every pull request containing application, infrastructure, workflow, or test cod
 
 Default implementation:
 
-- CodeRabbit reviews the GitHub pull request automatically.
-- The reviewer must be independent of the primary implementation pass.
+- OpenAI Codex reviews the GitHub pull request.
+- The Codex review must be independent of the primary implementation pass.
 - Critical, High, or otherwise blocking findings must be fixed or explicitly accepted by the project owner.
-- After material fixes, the reviewer should re-evaluate the updated diff.
-- CI and automated tests remain mandatory; peer review does not replace them.
+- After material fixes, request another review of the updated diff when needed.
+- CI and automated tests remain mandatory; AI review does not replace them.
 
-Fallback when CodeRabbit is unavailable:
+Fallback when Codex review is unavailable:
 
-- Run the Standard Code Review Prompt below through a separate Claude or Gemini session.
+- Run the Standard Code Review Prompt below through a separate Claude, Gemini, or other capable model session.
 - Provide the PR diff and relevant ReelAgent governance context.
 - Record the reviewer, findings, disposition, and any accepted risk on the pull request before merge.
 
@@ -39,7 +37,7 @@ Documentation-only typo/copy changes may skip the baseline peer review when they
 
 ## Mandatory Additional Independent Review
 
-In addition to the baseline code-PR peer review, use a second LLM review for:
+In addition to the baseline code-PR peer review, use another independent model review for:
 
 - Major architectural decisions
 - New infrastructure/platform dependencies
@@ -56,6 +54,8 @@ In addition to the baseline code-PR peer review, use a second LLM review for:
 - Authoritative performance guidance
 - Large refactors
 - Ambiguity explicitly flagged by the primary architect
+
+For these cases, provider/model diversity is preferred where practical. A Codex code review alone does not replace a deliberate architecture review when one is required.
 
 ## Optional Review
 
@@ -118,6 +118,8 @@ Return prioritized findings with file/function references when available. For ea
 
 Do not bias the reviewer by saying another model already approved the design. Ask for counterexamples and what would make the reviewer reject the proposal.
 
+The implementation agent may respond to findings and make fixes, but the updated diff should be reviewed independently again when the fix materially changes behavior.
+
 ## Reconciling Disagreement
 
 Do not decide by model voting.
@@ -139,13 +141,13 @@ If uncertainty remains and the choice is reversible, choose the simpler option a
 
 After material review, update `DECISIONS.md` with context, options, primary recommendation, independent review summary, disagreements, evidence, final decision, and consequences.
 
-## LLM Review Is Not a Test Substitute
+## AI Review Is Not a Test Substitute
 
 Agreement among models does not prove correctness. Use automated tests, prototypes, benchmarks, documentation, and runtime evidence.
 
 ## Provider Diversity
 
-Where practical, use different model families for independent review. Rotate author/reviewer roles where useful.
+For routine code PRs, Codex is the default reviewer. For material architectural or high-risk decisions, use a different model family where practical so the second review is genuinely independent rather than another pass through the same model family.
 
 ## Sensitive Context
 
