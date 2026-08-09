@@ -12,10 +12,11 @@ All project changes must go through a feature branch and pull request before the
 3. Commit changes only to that branch. Do not commit directly to `main`.
 4. Push the branch and open a pull request targeting `main`.
 5. CI must pass before merge.
-6. Every code PR must receive an independent peer review before merge.
-   - Default reviewer: CodeRabbit on the GitHub PR.
-   - CodeRabbit findings are review input, not automatic truth; blocking findings must be fixed or explicitly accepted by the project owner.
-   - If CodeRabbit is unavailable, a separate Claude or Gemini review using `LLM_REVIEW_POLICY.md` is required and its findings must be recorded on the PR.
+6. Every code PR must receive an independent AI peer review before merge.
+   - Default reviewer: OpenAI Codex on the GitHub pull request.
+   - The reviewer must be independent of the primary implementation pass.
+   - Codex findings are review input, not automatic truth; blocking findings must be fixed or explicitly accepted by the project owner.
+   - If Codex review is unavailable, run the standard code-review prompt from `LLM_REVIEW_POLICY.md` in a separate Claude, Gemini, or other capable model session and record the findings on the PR.
 7. Resolve blocking review findings on the same branch and let CI and peer review run again as needed.
 8. Merge only after the project owner approves the change and no unresolved blocking findings remain.
 
