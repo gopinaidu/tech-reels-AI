@@ -2,24 +2,42 @@
 
 ## Purpose
 
-ReelAgent intentionally uses multiple LLMs as independent reviewers, including ChatGPT, Claude, Gemini, and future capable models.
-
-The goal is to reduce blind spots, not to manufacture consensus.
+ReelAgent uses independent AI reviewers to reduce blind spots without manufacturing consensus. OpenAI Codex is the default code-PR reviewer; Claude, Gemini, and other capable models remain useful for fallback and additional architecture review.
 
 ## Roles
 
 ### Primary Architect / Implementer
-Produces initial design, assumptions, options, recommendation, implementation where applicable, and test approach.
+Produces the initial design, assumptions, options, recommendation, implementation where applicable, and test approach.
 
 ### Independent Reviewer
-Evaluates independently and tries to find problems rather than confirm the proposal.
+Evaluates independently and tries to find problems rather than confirm the proposal. The reviewer should not be the same agent/session that performed the primary implementation pass.
 
 ### Project Owner
-Makes the final call on material tradeoffs.
+Makes the final call on material tradeoffs and accepts or rejects residual risk.
 
-## Mandatory Independent Review
+## Baseline Peer Review For Every Code PR
 
-Use a second LLM for:
+Every pull request containing application, infrastructure, workflow, or test code must receive an independent AI peer review before merge.
+
+Default implementation:
+
+- OpenAI Codex reviews the GitHub pull request.
+- The Codex review must be independent of the primary implementation pass.
+- Critical, High, or otherwise blocking findings must be fixed or explicitly accepted by the project owner.
+- After material fixes, request another review of the updated diff when needed.
+- CI and automated tests remain mandatory; AI review does not replace them.
+
+Fallback when Codex review is unavailable:
+
+- Run the Standard Code Review Prompt below through a separate Claude, Gemini, or other capable model session.
+- Provide the PR diff and relevant ReelAgent governance context.
+- Record the reviewer, findings, disposition, and any accepted risk on the pull request before merge.
+
+Documentation-only typo/copy changes may skip the baseline peer review when they cannot change behavior, governance, security, architecture, or operational meaning.
+
+## Mandatory Additional Independent Review
+
+In addition to the baseline code-PR peer review, use another independent model review for:
 
 - Major architectural decisions
 - New infrastructure/platform dependencies
@@ -37,9 +55,11 @@ Use a second LLM for:
 - Large refactors
 - Ambiguity explicitly flagged by the primary architect
 
+For these cases, provider/model diversity is preferred where practical. A Codex code review alone does not replace a deliberate architecture review when one is required.
+
 ## Optional Review
 
-Usually unnecessary for naming cleanup, simple CRUD, copy changes, straightforward tests, documentation typos, and behavior-preserving small refactors.
+Additional review beyond the baseline peer-review gate is usually unnecessary for naming cleanup, simple CRUD, copy changes, straightforward tests, documentation typos, and behavior-preserving small refactors.
 
 ## Required Review Packet
 
@@ -88,6 +108,8 @@ Do not recommend additional infrastructure unless it solves a stated problem."
 
 Review for functional correctness, edge cases, exception handling, security, concurrency, data integrity, idempotency, approval/artifact integrity, API misuse, LLM output validation, tests, observability, proprietary-information risk, unnecessary complexity, and cost impact.
 
+For Python changes, explicitly check typing, async behavior, resource lifecycle, exception boundaries, mutable/default-state hazards, library/API misuse, and tests that may falsely pass despite broken behavior.
+
 Do not praise the code generically.
 
 Return prioritized findings with file/function references when available. For each blocking finding, provide a concrete fix or acceptance criterion."
@@ -95,6 +117,8 @@ Return prioritized findings with file/function references when available. For ea
 ## Review Independence
 
 Do not bias the reviewer by saying another model already approved the design. Ask for counterexamples and what would make the reviewer reject the proposal.
+
+The implementation agent may respond to findings and make fixes, but the updated diff should be reviewed independently again when the fix materially changes behavior.
 
 ## Reconciling Disagreement
 
@@ -117,13 +141,13 @@ If uncertainty remains and the choice is reversible, choose the simpler option a
 
 After material review, update `DECISIONS.md` with context, options, primary recommendation, independent review summary, disagreements, evidence, final decision, and consequences.
 
-## LLM Review Is Not a Test Substitute
+## AI Review Is Not a Test Substitute
 
 Agreement among models does not prove correctness. Use automated tests, prototypes, benchmarks, documentation, and runtime evidence.
 
 ## Provider Diversity
 
-Where practical, use different model families for independent review. Rotate author/reviewer roles where useful.
+For routine code PRs, Codex is the default reviewer. For material architectural or high-risk decisions, use a different model family where practical so the second review is genuinely independent rather than another pass through the same model family.
 
 ## Sensitive Context
 

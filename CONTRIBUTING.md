@@ -12,9 +12,13 @@ All project changes must go through a feature branch and pull request before the
 3. Commit changes only to that branch. Do not commit directly to `main`.
 4. Push the branch and open a pull request targeting `main`.
 5. CI must pass before merge.
-6. Perform the required human and/or independent LLM review described in `CODE_READINESS.md` and `LLM_REVIEW_POLICY.md`.
-7. Resolve blocking review findings on the same branch and let CI run again.
-8. Merge only after the change is approved and no blocking findings remain.
+6. Every code PR must receive an independent AI peer review before merge.
+   - Default reviewer: OpenAI Codex on the GitHub pull request.
+   - The reviewer must be independent of the primary implementation pass.
+   - Codex findings are review input, not automatic truth; blocking findings must be fixed or explicitly accepted by the project owner.
+   - If Codex review is unavailable, run the standard code-review prompt from `LLM_REVIEW_POLICY.md` in a separate Claude, Gemini, or other capable model session and record the findings on the PR.
+7. Resolve blocking review findings on the same branch and let CI and peer review run again as needed.
+8. Merge only after the project owner explicitly authorizes the merge and no unresolved blocking findings remain. For a solo-owned repository, the merge action itself may serve as that authorization because GitHub does not allow an author to approve their own PR review.
 
 ## Pull Request Scope
 
@@ -35,6 +39,7 @@ The PR should make it easy to answer:
 - What changed and why?
 - What tests or checks ran?
 - Did CI pass?
-- Is independent LLM review required?
-- Were any review findings accepted or fixed?
+- Did the independent peer reviewer complete its review?
+- Which blocking findings were fixed or explicitly accepted?
+- Did the project owner explicitly authorize the merge?
 - Are documentation or decisions affected?
