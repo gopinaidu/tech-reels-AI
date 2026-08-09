@@ -1,6 +1,7 @@
 """Database primitives for ReelAgent persistence."""
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -23,8 +24,9 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
+@contextmanager
 def session_scope(factory: sessionmaker[Session]) -> Iterator[Session]:
-    """Yield a transaction-scoped session and roll back on failure."""
+    """Provide a transaction-scoped session and roll back on failure."""
 
     session = factory()
     try:
