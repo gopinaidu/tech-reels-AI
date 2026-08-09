@@ -18,7 +18,7 @@ All project changes must go through a feature branch and pull request before the
    - Codex findings are review input, not automatic truth; blocking findings must be fixed or explicitly accepted by the project owner.
    - If Codex review is unavailable, run the standard code-review prompt from `LLM_REVIEW_POLICY.md` in a separate Claude, Gemini, or other capable model session and record the findings on the PR.
 7. Resolve blocking review findings on the same branch and let CI and peer review run again as needed.
-8. Merge only after the project owner approves the change and no unresolved blocking findings remain.
+8. Merge only after the project owner explicitly authorizes the merge and no unresolved blocking findings remain. For a solo-owned repository, the merge action itself may serve as that authorization because GitHub does not allow an author to approve their own PR review.
 
 ## Pull Request Scope
 
@@ -41,4 +41,5 @@ The PR should make it easy to answer:
 - Did CI pass?
 - Did the independent peer reviewer complete its review?
 - Which blocking findings were fixed or explicitly accepted?
+- Did the project owner explicitly authorize the merge?
 - Are documentation or decisions affected?
