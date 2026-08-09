@@ -11,7 +11,7 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, sel
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from reelagent.persistence import Base
-from reelagent.topics.models import SourceEvidence, SourceKind, TopicCandidate
+from reelagent.topics.models import SourceEvidence, TopicCandidate
 
 
 class TopicCandidateRow(Base):
@@ -60,12 +60,9 @@ def normalize_title(title: str) -> str:
 
 
 def build_dedupe_key(candidate: TopicCandidate) -> str:
-    """Build a stable MVP dedupe key without requiring embeddings."""
+    """Build a source-neutral MVP dedupe key without requiring embeddings."""
 
-    if candidate.source.external_id:
-        identity = f"{candidate.source.source_kind}:{candidate.source.external_id}"
-    else:
-        identity = normalize_title(candidate.title)
+    identity = normalize_title(candidate.title)
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
