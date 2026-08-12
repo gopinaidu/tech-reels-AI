@@ -85,8 +85,10 @@ class HackerNewsSearchSource:
         if not isinstance(created_at_i, int):
             return None
 
-        points = hit.get("points") if isinstance(hit.get("points"), int) else 0
-        comments = hit.get("num_comments") if isinstance(hit.get("num_comments"), int) else 0
+        raw_points = hit.get("points")
+        raw_comments = hit.get("num_comments")
+        points: int = raw_points if isinstance(raw_points, int) else 0
+        comments: int = raw_comments if isinstance(raw_comments, int) else 0
         if points < self.min_points and comments < self.min_comments:
             return None
 
