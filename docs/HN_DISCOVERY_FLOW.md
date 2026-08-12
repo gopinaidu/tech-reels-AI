@@ -92,6 +92,30 @@ Trending and targeted results are merged using the existing deterministic normal
 
 Semantic clustering of differently worded stories is intentionally deferred.
 
+## Execution boundary
+
+The discovery flow can be invoked through `POST /topics/discover`. The HTTP endpoint is deliberately thin: it resolves application configuration and database connectivity, then delegates to `TopicDiscoveryService`.
+
+```text
+POST /topics/discover
+        |
+        v
+TopicDiscoveryService
+        |
+        +--> HackerNewsDiscoveryCoordinator
+        |         |
+        |         +--> trending + targeted discovery
+        |
+        +--> SqlAlchemyTopicCandidateRepository
+                  |
+                  v
+              PostgreSQL
+```
+
+The service returns a compact run summary containing discovered/persisted counts plus candidate title, HN engagement signals, discovery method, and matched topic group/query. This response is intended for operator validation and later administrative UI use; it is not a public content API.
+
+If `DATABASE_URL` is not configured, the endpoint fails explicitly rather than running a discovery pass whose results cannot be durably stored.
+
 ## Downstream boundary
 
 Discovery only answers whether a topic is worth considering. It does not decide that a topic belongs in the final content plan and it does not treat Hacker News claims as verified facts.
