@@ -1,4 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from functools import lru_cache
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException
 
 from reelagent.config import get_settings
 from reelagent.persistence import create_database_engine, create_session_factory
@@ -12,15 +15,23 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/topics/discover", tags=["topics"])
-async def discover_topics() -> dict[str, object]:
+@lru_cache(maxsize=1)
+def get_topic_discovery_service() -> TopicDiscoveryService:
     settings = get_settings()
     if settings.database_url is None:
         raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
 
     engine = create_database_engine(settings.database_url)
-    session_factory = create_session_factory(engine)
-    service = TopicDiscoveryService(settings=settings, session_factory=session_factory)
+    return TopicDiscoveryService(
+        settings=settings,
+        session_factory=create_session_factory(engine),
+    )
+
+
+@app.post("/topics/discover", tags=["topics"])
+async def discover_topics(
+    service: Annotated[TopicDiscoveryService, Depends(get_topic_discovery_service)],
+) -> dict[str, object]:
     result = await service.run()
     return {
         "discovered_count": result.discovered_count,
