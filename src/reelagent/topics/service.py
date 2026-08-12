@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from reelagent.config import Settings
 from reelagent.persistence import session_scope
 from reelagent.topics.discovery import HackerNewsDiscoveryCoordinator
 from reelagent.topics.models import TopicCandidate
 from reelagent.topics.persistence import SqlAlchemyTopicCandidateRepository
+
+
+class DiscoveryCoordinator(Protocol):
+    async def discover(self) -> list[TopicCandidate]: ...
 
 
 @dataclass(frozen=True)
@@ -38,7 +43,7 @@ class TopicDiscoveryService:
         *,
         settings: Settings,
         session_factory: sessionmaker[Session],
-        coordinator: HackerNewsDiscoveryCoordinator | None = None,
+        coordinator: DiscoveryCoordinator | None = None,
     ) -> None:
         self.settings = settings
         self.session_factory = session_factory
