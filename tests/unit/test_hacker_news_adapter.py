@@ -28,6 +28,7 @@ def test_discover_maps_hacker_news_story_to_topic_candidate() -> None:
                     "title": "A useful distributed systems release",
                     "url": "https://example.com/release",
                     "score": 120,
+                    "descendants": 45,
                 },
             )
         raise AssertionError(f"Unexpected request: {request.url}")
@@ -42,6 +43,14 @@ def test_discover_maps_hacker_news_story_to_topic_candidate() -> None:
     assert candidate.source.external_id == "101"
     assert candidate.source.published_at == published_at
     assert str(candidate.source.url) == "https://news.ycombinator.com/item?id=101"
+    assert candidate.source.metadata == {
+        "author": "engineer",
+        "points": 120,
+        "comment_count": 45,
+        "article_url": "https://example.com/release",
+        "hn_rank": 1,
+        "discovery_method": "trending",
+    }
 
 
 def test_discover_filters_old_dead_and_non_story_items() -> None:

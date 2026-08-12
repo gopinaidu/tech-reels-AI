@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
@@ -19,6 +20,7 @@ class SourceEvidence(BaseModel, frozen=True):
     url: HttpUrl
     external_id: str | None = None
     published_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("published_at")
     @classmethod

@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, select
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from reelagent.persistence import Base
@@ -48,6 +48,7 @@ class TopicSourceRow(Base):
     external_id: Mapped[str | None] = mapped_column(String(300), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
 
     candidate: Mapped[TopicCandidateRow] = relationship(back_populates="sources")
 
@@ -105,6 +106,7 @@ class SqlAlchemyTopicCandidateRepository:
         identity = (source.source_kind.value, source.external_id, str(source.url))
         for existing in row.sources:
             if (existing.source_kind, existing.external_id, existing.url) == identity:
+                existing.metadata_json = dict(source.metadata)
                 return
         row.sources.append(self._to_source_row(candidate))
 
@@ -118,6 +120,7 @@ class SqlAlchemyTopicCandidateRepository:
             external_id=source.external_id,
             published_at=source.published_at,
             discovered_at=candidate.discovered_at,
+            metadata_json=dict(source.metadata),
         )
 
 
