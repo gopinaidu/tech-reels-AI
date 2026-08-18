@@ -2,10 +2,14 @@ import asyncio
 from datetime import UTC, datetime
 
 import httpx
+import pytest
 from pydantic import HttpUrl
 
 from reelagent.config import Settings
-from reelagent.intelligence.adapters.hacker_news import HackerNewsEvidenceCollector
+from reelagent.intelligence.adapters.hacker_news import (
+    HackerNewsEvidenceCollectionError,
+    HackerNewsEvidenceCollector,
+)
 from reelagent.intelligence.models import EvidenceRole
 from reelagent.topics.models import SourceEvidence, SourceKind, TopicCandidate
 
@@ -110,7 +114,9 @@ def test_flags_instruction_like_comment_content() -> None:
     collector = HackerNewsEvidenceCollector(settings, transport=_transport(_payload()))
 
     package = asyncio.run(collector.collect(_topic()))
-    injected = next(item for item in package.evidence if item.evidence_id == "hn-comment:204")
+    injected = next(
+        item for item in package.evidence if item.evidence_id == "hn-comment:204"
+    )
 
     assert injected.instruction_like_content_detected is True
 
@@ -125,16 +131,26 @@ def test_scan_limit_bounds_comment_processing() -> None:
 
     package = asyncio.run(collector.collect(_topic()))
 
-    assert [item.evidence_id for item in package.evidence] == ["hn-story:123", "hn-comment:201"]
+    assert [item.evidence_id for item in package.evidence] == [
+        "hn-story:123",
+        "hn-comment:201",
+    ]
 
 
 def test_rejects_non_hacker_news_topic() -> None:
     settings = Settings(_env_file=None)
     collector = HackerNewsEvidenceCollector(settings, transport=_transport(_payload()))
 
-    try:
+    with pytest.raises(ValueError, match="requires a Hacker News topic"):
         asyncio.run(collector.collect(_topic(source_kind=SourceKind.COMMUNITY)))
-    except ValueError as exc:
-        assert "requires a Hacker News topic" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
+
+
+def test_wraps_hacker_news_http_failures() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, request=request)
+
+    settings = Settings(_env_file=None)
+    collector = HackerNewsEvidenceCollector(settings, transport=httpx.MockTransport(handler))
+
+    with pytest.raises(HackerNewsEvidenceCollectionError, match="evidence collection failed"):
+        asyncio.run(collector.collect(_topic()))
