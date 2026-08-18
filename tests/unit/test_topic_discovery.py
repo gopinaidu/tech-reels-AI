@@ -18,6 +18,7 @@ def _candidate(
     discovery_method: str,
     matched_topic_group: str | None = None,
     matched_query: str | None = None,
+    summary: str | None = None,
 ) -> TopicCandidate:
     metadata: dict[str, object] = {
         "points": points,
@@ -32,7 +33,7 @@ def _candidate(
     now = datetime.now(UTC)
     return TopicCandidate(
         title=title,
-        summary=f"Hacker News story: {title}",
+        summary=summary or f"Hacker News story: {title}",
         discovered_at=now,
         source=SourceEvidence(
             source_name="Hacker News",
@@ -141,12 +142,12 @@ def test_targeted_and_trending_candidates_share_one_ranked_pool(monkeypatch) -> 
     result = asyncio.run(coordinator.discover())
 
     assert [candidate.title for candidate in result] == [
-        "Kafka event processing reliability lessons",
         "Linux kernel performance improvements",
+        "Kafka event processing reliability lessons",
     ]
 
 
-def test_deduplication_keeps_higher_ranked_candidate(monkeypatch) -> None:
+def test_deduplication_keeps_higher_scored_candidate(monkeypatch) -> None:
     trending = [
         _candidate(
             "PostgreSQL query planner deep dive",
@@ -190,3 +191,43 @@ def test_deduplication_keeps_higher_ranked_candidate(monkeypatch) -> None:
 
     assert len(result) == 1
     assert result[0].source.metadata["discovery_method"] == "targeted_search"
+
+
+def test_synthetic_summary_does_not_inflate_title_relevance() -> None:
+    candidate = _candidate(
+        "A practical field guide",
+        external_id="40",
+        points=20,
+        comments=10,
+        discovery_method="targeted_search",
+        matched_topic_group="ai",
+        matched_query="AI agent",
+        summary="Hacker News story matching AI agent, LLM, RAG, Python, Kafka, Kubernetes",
+    )
+
+    assert discovery_module._title_relevance(candidate) == 0
+    assert discovery_module._is_technically_relevant(candidate) is True
+
+
+def test_weighted_score_allows_engagement_to_overcome_one_keyword_difference() -> None:
+    low_engagement = _candidate(
+        "Linux kernel GPU performance",
+        external_id="50",
+        points=10,
+        comments=2,
+        discovery_method="trending",
+    )
+    high_engagement = _candidate(
+        "PostgreSQL performance breakthrough",
+        external_id="51",
+        points=500,
+        comments=250,
+        discovery_method="trending",
+    )
+
+    assert discovery_module._title_relevance(low_engagement) > discovery_module._title_relevance(
+        high_engagement
+    )
+    assert discovery_module._candidate_score(high_engagement) > discovery_module._candidate_score(
+        low_engagement
+    )
