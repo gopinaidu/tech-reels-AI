@@ -12,7 +12,7 @@ from reelagent.intelligence.models import (
     TopicBrief,
     TopicEvidencePackage,
 )
-from reelagent.intelligence.ports import TopicIntelligenceService
+from reelagent.intelligence.ports import TopicEvidenceCollector, TopicIntelligenceService
 
 __all__ = [
     "Claim",
@@ -24,6 +24,7 @@ __all__ = [
     "KeyInsight",
     "ReelWorthiness",
     "TopicBrief",
+    "TopicEvidenceCollector",
     "TopicEvidencePackage",
     "TopicIntelligenceService",
 ]
