@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -42,7 +43,7 @@ class Evidence(BaseModel, frozen=True):
     instruction_like_content_detected: bool = False
 
     @model_validator(mode="after")
-    def retrieved_at_must_be_timezone_aware(self) -> Evidence:
+    def retrieved_at_must_be_timezone_aware(self) -> Self:
         if self.retrieved_at.tzinfo is None:
             raise ValueError("retrieved_at must be timezone-aware")
         return self
@@ -58,7 +59,7 @@ class Claim(BaseModel, frozen=True):
     verification_required: bool = True
 
     @model_validator(mode="after")
-    def factual_claims_require_evidence(self) -> Claim:
+    def factual_claims_require_evidence(self) -> Self:
         if self.kind == ClaimKind.FACT and not self.evidence_ids:
             raise ValueError("factual claims must reference at least one evidence item")
         return self
@@ -92,10 +93,8 @@ class TopicEvidencePackage(BaseModel, frozen=True):
     evidence: tuple[Evidence, ...] = Field(min_length=1, max_length=40)
 
     @model_validator(mode="after")
-    def evidence_ids_must_be_unique(self) -> TopicEvidencePackage:
-        evidence_ids = [item.evidence_id for item in self.evidence]
-        if len(evidence_ids) != len(set(evidence_ids)):
-            raise ValueError("evidence_id values must be unique within a topic evidence package")
+    def evidence_ids_must_be_unique(self) -> Self:
+        _validate_unique_evidence_ids(self.evidence)
         return self
 
 
@@ -114,10 +113,11 @@ class TopicBrief(BaseModel, frozen=True):
     created_at: datetime
 
     @model_validator(mode="after")
-    def validate_cross_references(self) -> TopicBrief:
+    def validate_cross_references(self) -> Self:
         if self.created_at.tzinfo is None:
             raise ValueError("created_at must be timezone-aware")
 
+        _validate_unique_evidence_ids(self.evidence)
         evidence_ids = {item.evidence_id for item in self.evidence}
         for claim in self.claims:
             missing = set(claim.evidence_ids) - evidence_ids
@@ -130,7 +130,17 @@ class TopicBrief(BaseModel, frozen=True):
                     f"discussion insight references unknown evidence ids: {sorted(missing)}"
                 )
         for insight in self.key_insights:
-            invalid = [index for index in insight.claim_indices if index < 0 or index >= len(self.claims)]
+            invalid = [
+                index
+                for index in insight.claim_indices
+                if index < 0 or index >= len(self.claims)
+            ]
             if invalid:
                 raise ValueError(f"key insight references invalid claim indices: {invalid}")
         return self
+
+
+def _validate_unique_evidence_ids(evidence: tuple[Evidence, ...]) -> None:
+    evidence_ids = [item.evidence_id for item in evidence]
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise ValueError("evidence_id values must be unique")
