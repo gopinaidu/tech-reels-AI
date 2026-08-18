@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     hn_targeted_min_points: int = Field(default=10, ge=0)
     hn_targeted_min_comments: int = Field(default=5, ge=0)
     hn_targeted_freshness_days: int = Field(default=7, ge=1, le=30)
+    hn_discovery_limit: int = Field(default=20, ge=1, le=100)
 
     max_revision_cycles: int = Field(default=2, ge=0, le=10)
 

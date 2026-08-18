@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import UTC, datetime, timedelta
 
 from reelagent.config import Settings
@@ -9,9 +10,62 @@ from reelagent.topics.adapters.hacker_news_search import HackerNewsSearchSource
 from reelagent.topics.models import DiscoveryQuery, TopicCandidate
 from reelagent.topics.persistence import build_dedupe_key
 
+_TECHNICAL_SIGNALS = (
+    "ai",
+    "llm",
+    "agent",
+    "inference",
+    "rag",
+    "machine learning",
+    "model",
+    "openai",
+    "claude",
+    "cursor",
+    "software",
+    "developer",
+    "programming",
+    "code",
+    "github",
+    "git",
+    "linux",
+    "kernel",
+    "database",
+    "postgres",
+    "postgresql",
+    "mongodb",
+    "redis",
+    "vector",
+    "kafka",
+    "streaming",
+    "flink",
+    "java",
+    "python",
+    "rust",
+    "golang",
+    "jvm",
+    "kubernetes",
+    "docker",
+    "aws",
+    "azure",
+    "gcp",
+    "cloud",
+    "serverless",
+    "distributed",
+    "microservices",
+    "backend",
+    "api",
+    "system design",
+    "scalability",
+    "reliability",
+    "performance",
+    "cpu",
+    "gpu",
+    "compiler",
+)
+
 
 class HackerNewsDiscoveryCoordinator:
-    """Combine broad HN trending discovery with configured targeted searches."""
+    """Combine and rank broad HN trending discovery with configured targeted searches."""
 
     def __init__(
         self,
@@ -53,27 +107,45 @@ class HackerNewsDiscoveryCoordinator:
             for term in terms
         ]
         targeted_sets = await asyncio.gather(*tasks) if tasks else []
+        targeted = sorted(
+            (candidate for candidates in targeted_sets for candidate in candidates),
+            key=_candidate_rank,
+            reverse=True,
+        )[: self.settings.hn_targeted_total_limit]
 
-        trending_by_key = {build_dedupe_key(candidate): candidate for candidate in trending}
-        targeted_by_key: dict[str, TopicCandidate] = {}
-        for candidates in targeted_sets:
-            for candidate in candidates:
-                key = build_dedupe_key(candidate)
-                if key in trending_by_key:
-                    continue
-                existing = targeted_by_key.get(key)
-                if existing is None or _candidate_signal(candidate) > _candidate_signal(existing):
-                    targeted_by_key[key] = candidate
+        candidates_by_key: dict[str, TopicCandidate] = {}
+        for candidate in [*trending, *targeted]:
+            if _technical_relevance(candidate) == 0:
+                continue
 
-        targeted = sorted(targeted_by_key.values(), key=_candidate_signal, reverse=True)
-        return trending + targeted[: self.settings.hn_targeted_total_limit]
+            key = build_dedupe_key(candidate)
+            existing = candidates_by_key.get(key)
+            if existing is None or _candidate_rank(candidate) > _candidate_rank(existing):
+                candidates_by_key[key] = candidate
+
+        ranked = sorted(candidates_by_key.values(), key=_candidate_rank, reverse=True)
+        return ranked[: self.settings.hn_discovery_limit]
 
 
-def _candidate_signal(candidate: TopicCandidate) -> tuple[int, int]:
+def _technical_relevance(candidate: TopicCandidate) -> int:
+    metadata = candidate.source.metadata
+    discovery_method = metadata.get("discovery_method")
+    relevance = 1 if discovery_method == "targeted_search" else 0
+
+    haystack = f"{candidate.title} {candidate.summary}".casefold()
+    relevance += sum(
+        1 for signal in _TECHNICAL_SIGNALS if re.search(rf"\b{re.escape(signal)}\b", haystack)
+    )
+    return relevance
+
+
+def _candidate_rank(candidate: TopicCandidate) -> tuple[int, int, int]:
     metadata = candidate.source.metadata
     points = metadata.get("points", 0)
     comments = metadata.get("comment_count", 0)
     return (
-        points if isinstance(points, int) else 0,
+        _technical_relevance(candidate),
+        (points if isinstance(points, int) else 0)
+        + 2 * (comments if isinstance(comments, int) else 0),
         comments if isinstance(comments, int) else 0,
     )
