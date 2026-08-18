@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from reelagent.intelligence.models import ClaimKind, TopicBrief
 from reelagent.topics.models import SourceKind
@@ -32,6 +32,7 @@ class TopicQualityGate:
         if not brief.key_insights:
             reasons.append("topic brief has no key technical insights")
 
+        evidence_by_id = {item.evidence_id: item for item in brief.evidence}
         referenced_instruction_like = {
             item.evidence_id
             for item in brief.evidence
@@ -48,7 +49,6 @@ class TopicQualityGate:
             if referenced_instruction_like.intersection(claim.evidence_ids):
                 reasons.append(f"material claim {index} relies on instruction-like evidence")
 
-            evidence_by_id = {item.evidence_id: item for item in brief.evidence}
             claim_sources = [
                 evidence_by_id[evidence_id].source.source_kind
                 for evidence_id in claim.evidence_ids
