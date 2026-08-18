@@ -1,4 +1,4 @@
-"""Topic Intelligence domain contracts."""
+"""Topic Intelligence domain contracts and application services."""
 
 from reelagent.intelligence.models import (
     Claim,
@@ -12,10 +12,19 @@ from reelagent.intelligence.models import (
     TopicBrief,
     TopicEvidencePackage,
 )
+from reelagent.intelligence.pipeline import (
+    TopicIntelligencePipeline,
+    TopicIntelligencePipelineResult,
+)
 from reelagent.intelligence.ports import (
     StructuredLlmClient,
     TopicEvidenceCollector,
     TopicIntelligenceService,
+)
+from reelagent.intelligence.quality import (
+    TopicQualityDecision,
+    TopicQualityGate,
+    TopicQualityResult,
 )
 from reelagent.intelligence.service import (
     LlmTopicIntelligenceService,
@@ -37,5 +46,10 @@ __all__ = [
     "TopicEvidenceCollector",
     "TopicEvidencePackage",
     "TopicIntelligenceOutputError",
+    "TopicIntelligencePipeline",
+    "TopicIntelligencePipelineResult",
     "TopicIntelligenceService",
+    "TopicQualityDecision",
+    "TopicQualityGate",
+    "TopicQualityResult",
 ]
