@@ -115,7 +115,10 @@ def test_topic_brief_accepts_auditable_cross_references() -> None:
                 evidence_ids=(evidence.evidence_id,),
             ),
             Claim(
-                text="Teams should benchmark representative production queries before upgrading.",
+                text=(
+                    "Teams should benchmark representative production queries "
+                    "before upgrading."
+                ),
                 kind=ClaimKind.RECOMMENDATION,
                 verification_required=False,
             ),
