@@ -63,6 +63,13 @@ _TECHNICAL_SIGNALS = (
     "compiler",
 )
 
+_RELEVANCE_WEIGHT = 100.0
+_TARGETED_SOURCE_BONUS = 25.0
+_POINT_WEIGHT = 0.5
+_COMMENT_WEIGHT = 1.0
+_MAX_POINTS_CONTRIBUTION = 500
+_MAX_COMMENTS_CONTRIBUTION = 250
+
 
 class HackerNewsDiscoveryCoordinator:
     """Combine and rank broad HN trending discovery with configured targeted searches."""
@@ -109,43 +116,52 @@ class HackerNewsDiscoveryCoordinator:
         targeted_sets = await asyncio.gather(*tasks) if tasks else []
         targeted = sorted(
             (candidate for candidates in targeted_sets for candidate in candidates),
-            key=_candidate_rank,
+            key=_candidate_score,
             reverse=True,
         )[: self.settings.hn_targeted_total_limit]
 
         candidates_by_key: dict[str, TopicCandidate] = {}
         for candidate in [*trending, *targeted]:
-            if _technical_relevance(candidate) == 0:
+            if not _is_technically_relevant(candidate):
                 continue
 
             key = build_dedupe_key(candidate)
             existing = candidates_by_key.get(key)
-            if existing is None or _candidate_rank(candidate) > _candidate_rank(existing):
+            if existing is None or _candidate_score(candidate) > _candidate_score(existing):
                 candidates_by_key[key] = candidate
 
-        ranked = sorted(candidates_by_key.values(), key=_candidate_rank, reverse=True)
+        ranked = sorted(candidates_by_key.values(), key=_candidate_score, reverse=True)
         return ranked[: self.settings.hn_discovery_limit]
 
 
-def _technical_relevance(candidate: TopicCandidate) -> int:
-    metadata = candidate.source.metadata
-    discovery_method = metadata.get("discovery_method")
-    relevance = 1 if discovery_method == "targeted_search" else 0
-
-    haystack = f"{candidate.title} {candidate.summary}".casefold()
-    relevance += sum(
-        1 for signal in _TECHNICAL_SIGNALS if re.search(rf"\b{re.escape(signal)}\b", haystack)
+def _title_relevance(candidate: TopicCandidate) -> int:
+    title = candidate.title.casefold()
+    return sum(
+        1 for signal in _TECHNICAL_SIGNALS if re.search(rf"\b{re.escape(signal)}\b", title)
     )
-    return relevance
 
 
-def _candidate_rank(candidate: TopicCandidate) -> tuple[int, int, int]:
+def _is_technically_relevant(candidate: TopicCandidate) -> bool:
+    if _title_relevance(candidate) > 0:
+        return True
+    return candidate.source.metadata.get("discovery_method") == "targeted_search"
+
+
+def _candidate_score(candidate: TopicCandidate) -> float:
     metadata = candidate.source.metadata
-    points = metadata.get("points", 0)
-    comments = metadata.get("comment_count", 0)
+    raw_points = metadata.get("points", 0)
+    raw_comments = metadata.get("comment_count", 0)
+    points = raw_points if isinstance(raw_points, int) else 0
+    comments = raw_comments if isinstance(raw_comments, int) else 0
+    targeted_bonus = (
+        _TARGETED_SOURCE_BONUS
+        if metadata.get("discovery_method") == "targeted_search"
+        else 0.0
+    )
+
     return (
-        _technical_relevance(candidate),
-        (points if isinstance(points, int) else 0)
-        + 2 * (comments if isinstance(comments, int) else 0),
-        comments if isinstance(comments, int) else 0,
+        _title_relevance(candidate) * _RELEVANCE_WEIGHT
+        + targeted_bonus
+        + min(points, _MAX_POINTS_CONTRIBUTION) * _POINT_WEIGHT
+        + min(comments, _MAX_COMMENTS_CONTRIBUTION) * _COMMENT_WEIGHT
     )
