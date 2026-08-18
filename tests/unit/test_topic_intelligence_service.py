@@ -6,7 +6,10 @@ import pytest
 from pydantic import HttpUrl
 
 from reelagent.intelligence.models import Evidence, EvidenceRole, TopicEvidencePackage
-from reelagent.intelligence.service import LlmTopicIntelligenceService, TopicIntelligenceOutputError
+from reelagent.intelligence.service import (
+    LlmTopicIntelligenceService,
+    TopicIntelligenceOutputError,
+)
 from reelagent.topics.models import SourceEvidence, SourceKind, TopicCandidate
 
 
