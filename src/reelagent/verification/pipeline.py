@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from reelagent.intelligence.models import Evidence, TopicBrief
+from reelagent.intelligence.models import ClaimKind, Evidence, TopicBrief
 from reelagent.intelligence.quality import TopicQualityDecision, TopicQualityResult
 from reelagent.topics.models import SourceKind
 from reelagent.verification.models import (
@@ -16,7 +16,7 @@ _NON_AUTHORITATIVE_SOURCE_KINDS = {SourceKind.HACKER_NEWS, SourceKind.COMMUNITY}
 
 
 class VerificationPipeline:
-    """Verify factual claims selected by the Topic Intelligence quality gate."""
+    """Verify every material factual claim that requires verification."""
 
     def __init__(
         self,
@@ -31,11 +31,9 @@ class VerificationPipeline:
         if quality.decision != TopicQualityDecision.READY_FOR_VERIFICATION:
             raise ValueError("verification requires a Topic Brief that passed the quality gate")
 
+        claim_indices = _claims_to_verify(brief, quality)
         results: list[ClaimVerificationResult] = []
-        for claim_index in quality.claims_requiring_independent_verification:
-            if claim_index >= len(brief.claims):
-                raise ValueError(f"quality gate references unknown claim index: {claim_index}")
-
+        for claim_index in claim_indices:
             claim = brief.claims[claim_index]
             request = ClaimVerificationRequest(
                 claim_index=claim_index,
@@ -66,6 +64,19 @@ class VerificationPipeline:
             results.append(result)
 
         return VerificationReport(outcome=_report_outcome(results), results=tuple(results))
+
+
+def _claims_to_verify(brief: TopicBrief, quality: TopicQualityResult) -> tuple[int, ...]:
+    requested = set(quality.claims_requiring_independent_verification)
+    requested.update(
+        index
+        for index, claim in enumerate(brief.claims)
+        if claim.material and claim.kind == ClaimKind.FACT and claim.verification_required
+    )
+    invalid = [index for index in requested if index < 0 or index >= len(brief.claims)]
+    if invalid:
+        raise ValueError(f"quality gate references unknown claim indices: {sorted(invalid)}")
+    return tuple(sorted(requested))
 
 
 def _independent_authoritative_evidence(
