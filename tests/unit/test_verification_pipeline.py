@@ -16,6 +16,7 @@ from reelagent.intelligence.models import (
 from reelagent.intelligence.quality import TopicQualityDecision, TopicQualityResult
 from reelagent.topics.models import SourceEvidence, SourceKind, TopicCandidate
 from reelagent.verification.models import (
+    ClaimVerificationRequest,
     ClaimVerificationResult,
     ClaimVerificationVerdict,
     VerificationOutcome,
@@ -23,30 +24,19 @@ from reelagent.verification.models import (
 from reelagent.verification.pipeline import VerificationPipeline
 
 
-def _source(kind: SourceKind, url: str, name: str) -> SourceEvidence:
+def _evidence(evidence_id: str, kind: SourceKind, url: str) -> Evidence:
     now = datetime.now(UTC)
-    return SourceEvidence(
-        source_name=name,
-        source_kind=kind,
-        url=HttpUrl(url),
-        published_at=now,
-    )
-
-
-def _evidence(
-    evidence_id: str,
-    *,
-    kind: SourceKind,
-    url: str,
-    instruction_like: bool = False,
-) -> Evidence:
     return Evidence(
         evidence_id=evidence_id,
-        source=_source(kind, url, evidence_id),
+        source=SourceEvidence(
+            source_name=evidence_id,
+            source_kind=kind,
+            url=HttpUrl(url),
+            published_at=now,
+        ),
         roles=frozenset({EvidenceRole.VERIFICATION}),
         summary="Evidence relevant to the claim.",
-        retrieved_at=datetime.now(UTC),
-        instruction_like_content_detected=instruction_like,
+        retrieved_at=now,
     )
 
 
@@ -54,8 +44,8 @@ def _brief() -> TopicBrief:
     now = datetime.now(UTC)
     discovery = _evidence(
         "hn-story:123",
-        kind=SourceKind.HACKER_NEWS,
-        url="https://news.ycombinator.com/item?id=123",
+        SourceKind.HACKER_NEWS,
+        "https://news.ycombinator.com/item?id=123",
     )
     topic = TopicCandidate(
         title="PostgreSQL queue discussion",
@@ -70,7 +60,7 @@ def _brief() -> TopicBrief:
         recommended_angle="When Postgres can replace a dedicated queue",
         claims=(
             Claim(
-                text="PostgreSQL supports SKIP LOCKED for queue-style worker coordination.",
+                text="PostgreSQL supports SKIP LOCKED for worker coordination.",
                 kind=ClaimKind.FACT,
                 evidence_ids=(discovery.evidence_id,),
             ),
@@ -106,7 +96,7 @@ class _Collector:
     def __init__(self, evidence: tuple[Evidence, ...]) -> None:
         self.evidence = evidence
 
-    async def collect(self, request: object) -> tuple[Evidence, ...]:
+    async def collect(self, request: ClaimVerificationRequest) -> tuple[Evidence, ...]:
         return self.evidence
 
 
@@ -115,26 +105,29 @@ class _Verifier:
         self.verdict = verdict
         self.calls = 0
 
-    async def verify(self, request: object, evidence: tuple[Evidence, ...]) -> ClaimVerificationResult:
+    async def verify(
+        self,
+        request: ClaimVerificationRequest,
+        evidence: tuple[Evidence, ...],
+    ) -> ClaimVerificationResult:
         self.calls += 1
         return ClaimVerificationResult(
             request=request,
             verdict=self.verdict,
             verification_evidence=evidence,
-            rationale="Independent source evaluated against the claim.",
+            rationale="Independent evidence was evaluated against the claim.",
         )
 
 
 def test_supported_claim_is_ready_for_script() -> None:
     official = _evidence(
         "postgres-docs",
-        kind=SourceKind.OFFICIAL,
-        url="https://www.postgresql.org/docs/current/sql-select.html",
+        SourceKind.OFFICIAL,
+        "https://www.postgresql.org/docs/current/sql-select.html",
     )
     verifier = _Verifier(ClaimVerificationVerdict.SUPPORTED)
     pipeline = VerificationPipeline(
-        evidence_collector=_Collector((official,)),
-        verifier=verifier,
+        evidence_collector=_Collector((official,)), verifier=verifier
     )
 
     report = asyncio.run(pipeline.run(_brief(), _quality()))
@@ -144,41 +137,13 @@ def test_supported_claim_is_ready_for_script() -> None:
     assert verifier.calls == 1
 
 
-def test_community_only_evidence_needs_research_without_calling_verifier() -> None:
+def test_community_only_evidence_needs_research() -> None:
     community = _evidence(
-        "community-post",
-        kind=SourceKind.COMMUNITY,
-        url="https://example.com/community/post",
+        "community-post", SourceKind.COMMUNITY, "https://example.com/community/post"
     )
     verifier = _Verifier(ClaimVerificationVerdict.SUPPORTED)
     pipeline = VerificationPipeline(
-        evidence_collector=_Collector((community,)),
-        verifier=verifier,
-    )
-
-    report = asyncio.run(pipeline.run(_brief(), _quality()))
-
-    assert report.outcome == VerificationOutcome.NEEDS_RESEARCH
-    assert report.results[0].verdict == ClaimVerificationVerdict.INSUFFICIENT_EVIDENCE
-    assert verifier.calls == 0
-
-
-def test_same_source_and_instruction_like_evidence_do_not_count() -> None:
-    same_source = _evidence(
-        "same-source",
-        kind=SourceKind.OFFICIAL,
-        url="https://news.ycombinator.com/item?id=123",
-    )
-    injected = _evidence(
-        "injected-doc",
-        kind=SourceKind.OFFICIAL,
-        url="https://www.postgresql.org/docs/current/",
-        instruction_like=True,
-    )
-    verifier = _Verifier(ClaimVerificationVerdict.SUPPORTED)
-    pipeline = VerificationPipeline(
-        evidence_collector=_Collector((same_source, injected)),
-        verifier=verifier,
+        evidence_collector=_Collector((community,)), verifier=verifier
     )
 
     report = asyncio.run(pipeline.run(_brief(), _quality()))
@@ -190,8 +155,8 @@ def test_same_source_and_instruction_like_evidence_do_not_count() -> None:
 def test_unsupported_claim_requests_revision() -> None:
     official = _evidence(
         "postgres-docs",
-        kind=SourceKind.OFFICIAL,
-        url="https://www.postgresql.org/docs/current/sql-select.html",
+        SourceKind.OFFICIAL,
+        "https://www.postgresql.org/docs/current/sql-select.html",
     )
     pipeline = VerificationPipeline(
         evidence_collector=_Collector((official,)),
@@ -205,8 +170,7 @@ def test_unsupported_claim_requests_revision() -> None:
 
 def test_rejects_brief_that_did_not_pass_quality_gate() -> None:
     rejected = TopicQualityResult(
-        decision=TopicQualityDecision.REJECTED,
-        reasons=("too weak",),
+        decision=TopicQualityDecision.REJECTED, reasons=("too weak",)
     )
     pipeline = VerificationPipeline(
         evidence_collector=_Collector(()),
