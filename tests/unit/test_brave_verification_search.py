@@ -75,7 +75,7 @@ def test_runtime_default_requires_gemini_key() -> None:
     assert pipeline is not None
 
 
-def test_runtime_requires_brave_key_only_when_enabled() -> None:
+def test_runtime_requires_brave_key_only_for_brave_provider() -> None:
     with pytest.raises(VerificationRuntimeConfigurationError, match="BRAVE_SEARCH_API_KEY"):
         build_verification_pipeline(
             Settings(
@@ -83,7 +83,7 @@ def test_runtime_requires_brave_key_only_when_enabled() -> None:
                 llm_provider="gemini",
                 gemini_api_key=SecretStr("gemini"),
                 brave_search_api_key=SecretStr(""),
-                verification_use_brave=True,
+                verification_search_provider="brave",
             )
         )
 
@@ -93,7 +93,7 @@ def test_runtime_requires_brave_key_only_when_enabled() -> None:
             llm_provider="gemini",
             gemini_api_key=SecretStr("gemini"),
             brave_search_api_key=SecretStr("brave"),
-            verification_use_brave=True,
+            verification_search_provider="brave",
         )
     )
     assert pipeline is not None
