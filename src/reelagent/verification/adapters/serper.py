@@ -148,9 +148,11 @@ class SerperVerificationSearchClient:
             for item in ranked[:limit]:
                 url = item["link"]
                 title = item["title"]
+                search_snippet = item.get("snippet", "").strip()
                 page_text = await _fetch_page_text(client, url)
-                snippet = _relevant_excerpt(page_text, tokens) if page_text else item.get("snippet")
-                if not isinstance(snippet, str) or not snippet.strip():
+                page_excerpt = _relevant_excerpt(page_text, tokens) if page_text else ""
+                snippet = _combine_evidence_text(search_snippet, page_excerpt)
+                if not snippet:
                     continue
 
                 host = (urlparse(url).hostname or "").lower()
@@ -158,7 +160,7 @@ class SerperVerificationSearchClient:
                     VerificationSearchHit(
                         title=title.strip()[:300],
                         url=HttpUrl(url),
-                        snippet=snippet.strip()[:_MAX_EVIDENCE_SUMMARY_CHARS],
+                        snippet=snippet,
                         source_kind=source_kinds[host],
                     )
                 )
@@ -296,6 +298,20 @@ def _response_detail(response: httpx.Response) -> str:
         if isinstance(message, str) and message.strip():
             return message.strip()[:300]
     return response.text.strip()[:300] or "no response body"
+
+
+def _combine_evidence_text(search_snippet: str, page_excerpt: str) -> str:
+    search_snippet = _WS_RE.sub(" ", search_snippet).strip()
+    page_excerpt = _WS_RE.sub(" ", page_excerpt).strip()
+
+    if search_snippet and page_excerpt:
+        if page_excerpt in search_snippet or search_snippet in page_excerpt:
+            combined = search_snippet if len(search_snippet) >= len(page_excerpt) else page_excerpt
+        else:
+            combined = f"Search snippet: {search_snippet}\nPage excerpt: {page_excerpt}"
+    else:
+        combined = search_snippet or page_excerpt
+    return combined[:_MAX_EVIDENCE_SUMMARY_CHARS]
 
 
 def _tokens(text: str) -> tuple[str, ...]:
