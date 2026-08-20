@@ -59,20 +59,28 @@ def test_brave_search_handles_missing_web_results() -> None:
     assert asyncio.run(client.search("claim", limit=1)) == ()
 
 
-def test_runtime_requires_brave_and_openai_keys() -> None:
-    with pytest.raises(VerificationRuntimeConfigurationError, match="BRAVE_SEARCH_API_KEY"):
-        build_verification_pipeline(Settings(openai_api_key=SecretStr("openai")))
-
+def test_runtime_default_requires_only_openai_key() -> None:
     with pytest.raises(VerificationRuntimeConfigurationError, match="OPENAI_API_KEY"):
-        build_verification_pipeline(Settings(brave_search_api_key=SecretStr("brave")))
+        build_verification_pipeline(Settings())
+
+    pipeline = build_verification_pipeline(Settings(openai_api_key=SecretStr("openai")))
+    assert pipeline is not None
 
 
-def test_runtime_builds_pipeline_when_keys_are_configured() -> None:
+def test_runtime_requires_brave_key_only_when_enabled() -> None:
+    with pytest.raises(VerificationRuntimeConfigurationError, match="BRAVE_SEARCH_API_KEY"):
+        build_verification_pipeline(
+            Settings(
+                openai_api_key=SecretStr("openai"),
+                verification_use_brave=True,
+            )
+        )
+
     pipeline = build_verification_pipeline(
         Settings(
             brave_search_api_key=SecretStr("brave"),
             openai_api_key=SecretStr("openai"),
+            verification_use_brave=True,
         )
     )
-
     assert pipeline is not None
