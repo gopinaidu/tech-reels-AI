@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     topic_intelligence_model: str = "gpt-5.6-luna"
+    topic_intelligence_min_score: int = Field(default=65, ge=0, le=100)
 
     tts_provider: str | None = None
     tts_api_key: SecretStr | None = None
