@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import html
 import re
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import HttpUrl, SecretStr
+from pydantic import BaseModel, Field, HttpUrl, SecretStr
 
+from reelagent.intelligence.ports import StructuredLlmClient
 from reelagent.verification.adapters.search import VerificationSearchHit
 from reelagent.verification.trust import AuthoritativeDomain, domains_for_query, is_trusted_url
 
@@ -18,6 +20,7 @@ _MAX_PAGE_TEXT_CHARS = 100_000
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
 _MAX_TOKEN_OCCURRENCES = 5
 _MAX_SEARCH_TERMS = 8
+_MAX_RANKING_CANDIDATES = 10
 _SEARCH_STOP_WORDS = frozenset(
     {
         "and",
@@ -43,22 +46,46 @@ _SEARCH_STOP_WORDS = frozenset(
     }
 )
 
+_QUERY_PROMPT = """Create one concise web research query for verifying a technical claim.
+Keep the technology/product name and distinctive technical terms.
+Prefer terms likely to surface official technical documentation.
+Do not use search operators such as site:, OR, quotes, or minus filters.
+Return only the schema fields requested.
+"""
+
+_RANKING_PROMPT = """Rank already-trusted official search candidates for one factual claim.
+Select the candidates most likely to contain direct technical evidence for the claim.
+Use only candidate title, snippet, and URL relevance; do not decide whether the claim is true.
+Prefer specific reference or concept pages over generic documentation home pages.
+Return selected candidate indices in strongest-first order.
+"""
+
+
+class _ResearchQuery(BaseModel, frozen=True):
+    research_query: str = Field(min_length=3, max_length=250)
+
+
+class _CandidateRanking(BaseModel, frozen=True):
+    selected_indices: list[int] = Field(min_length=1, max_length=5)
+
 
 class SerperVerificationSearchError(RuntimeError):
     """Raised when Serper search fails unexpectedly."""
 
 
 class SerperVerificationSearchClient:
-    """Find trusted verification evidence through Serper and fetch official pages."""
+    """Find trusted evidence with Serper, optionally assisted by a structured LLM."""
 
     def __init__(
         self,
         *,
         api_key: SecretStr,
+        llm_client: StructuredLlmClient | None = None,
         timeout_seconds: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_key = api_key
+        self._llm_client = llm_client
         self._timeout = httpx.Timeout(timeout_seconds)
         self._transport = transport
 
@@ -76,12 +103,13 @@ class SerperVerificationSearchClient:
             for domain in domains
             for host in domain.hosts
         }
-        search_query = _build_search_query(query, domains)
+        fallback_query = _build_search_query(query, domains)
+        search_query = await self._generate_research_query(query, fallback_query)
         headers = {
             "X-API-KEY": self._api_key.get_secret_value(),
             "Content-Type": "application/json",
         }
-        payload = {"q": search_query, "num": min(max(limit * 2, 10), 20)}
+        payload = {"q": search_query, "num": _MAX_RANKING_CANDIDATES}
 
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
             try:
@@ -110,20 +138,16 @@ class SerperVerificationSearchClient:
             if not isinstance(results, list):
                 return ()
 
-            hits: list[VerificationSearchHit] = []
-            seen: set[str] = set()
-            tokens = _tokens(query)
-            for item in results:
-                if not isinstance(item, dict):
-                    continue
-                url = item.get("link")
-                title = item.get("title")
-                if not isinstance(url, str) or not isinstance(title, str) or not title.strip():
-                    continue
-                if url in seen or not is_trusted_url(url, trusted_hosts):
-                    continue
-                seen.add(url)
+            candidates = _trusted_candidates(results, trusted_hosts)
+            if not candidates:
+                return ()
+            ranked = await self._rank_candidates(query, candidates, limit)
 
+            hits: list[VerificationSearchHit] = []
+            tokens = _tokens(query)
+            for item in ranked[:limit]:
+                url = item["link"]
+                title = item["title"]
                 page_text = await _fetch_page_text(client, url)
                 snippet = _relevant_excerpt(page_text, tokens) if page_text else item.get("snippet")
                 if not isinstance(snippet, str) or not snippet.strip():
@@ -138,10 +162,92 @@ class SerperVerificationSearchClient:
                         source_kind=source_kinds[host],
                     )
                 )
-                if len(hits) >= limit:
-                    break
 
         return tuple(hits)
+
+    async def _generate_research_query(self, claim: str, fallback: str) -> str:
+        if self._llm_client is None:
+            return fallback
+        try:
+            raw = await self._llm_client.generate_json(
+                system_prompt=_QUERY_PROMPT,
+                input_payload={"claim": claim, "fallback_query": fallback},
+                output_schema=_ResearchQuery.model_json_schema(),
+            )
+            generated = _ResearchQuery.model_validate(raw).research_query.strip()
+        except Exception:
+            return fallback
+        return generated if not _contains_search_operator(generated) else fallback
+
+    async def _rank_candidates(
+        self,
+        claim: str,
+        candidates: list[dict[str, str]],
+        limit: int,
+    ) -> list[dict[str, str]]:
+        if self._llm_client is None or len(candidates) <= 1:
+            return candidates
+        payload_candidates = [
+            {
+                "index": index,
+                "title": item["title"],
+                "url": item["link"],
+                "snippet": item.get("snippet", "")[:500],
+            }
+            for index, item in enumerate(candidates)
+        ]
+        try:
+            raw = await self._llm_client.generate_json(
+                system_prompt=_RANKING_PROMPT,
+                input_payload={
+                    "claim": claim,
+                    "max_results": limit,
+                    "candidates": payload_candidates,
+                },
+                output_schema=_CandidateRanking.model_json_schema(),
+            )
+            ranking = _CandidateRanking.model_validate(raw).selected_indices
+        except Exception:
+            return candidates
+
+        ordered: list[dict[str, str]] = []
+        seen: set[int] = set()
+        for index in ranking:
+            if index in seen or index < 0 or index >= len(candidates):
+                continue
+            seen.add(index)
+            ordered.append(candidates[index])
+        for index, item in enumerate(candidates):
+            if index not in seen:
+                ordered.append(item)
+        return ordered
+
+
+def _trusted_candidates(
+    results: list[Any],
+    trusted_hosts: frozenset[str],
+) -> list[dict[str, str]]:
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("link")
+        title = item.get("title")
+        snippet = item.get("snippet")
+        if not isinstance(url, str) or not isinstance(title, str) or not title.strip():
+            continue
+        if url in seen or not is_trusted_url(url, trusted_hosts):
+            continue
+        seen.add(url)
+        candidates.append(
+            {
+                "link": url,
+                "title": title,
+                "snippet": snippet if isinstance(snippet, str) else "",
+            }
+        )
+    return candidates
 
 
 def _build_search_query(
@@ -171,6 +277,11 @@ def _append_search_term(term: str, terms: list[str], seen: set[str]) -> None:
         return
     seen.add(normalized)
     terms.append(term.strip())
+
+
+def _contains_search_operator(query: str) -> bool:
+    lowered = query.lower()
+    return "site:" in lowered or " or " in lowered or '"' in query
 
 
 def _response_detail(response: httpx.Response) -> str:
