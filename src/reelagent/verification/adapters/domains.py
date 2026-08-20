@@ -16,6 +16,7 @@ from reelagent.verification.adapters.search import VerificationSearchHit
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
+_MAX_EVIDENCE_SUMMARY_CHARS = 2_000
 
 
 @dataclass(frozen=True)
@@ -231,7 +232,7 @@ async def _fetch_snippet(client: httpx.AsyncClient, url: str) -> str:
         return ""
     text = html.unescape(_TAG_RE.sub(" ", response.text))
     normalized = _WS_RE.sub(" ", text).strip()
-    return normalized[:4_000]
+    return normalized[:_MAX_EVIDENCE_SUMMARY_CHARS]
 
 
 def _title_from_url(url: str) -> str:
