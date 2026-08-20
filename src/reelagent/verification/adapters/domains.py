@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import html
 import re
-from dataclasses import dataclass
-from typing import Iterable
 from urllib.parse import quote_plus, urljoin, urlparse
 from xml.etree import ElementTree
 
 import httpx
 from pydantic import HttpUrl
 
-from reelagent.topics.models import SourceKind
 from reelagent.verification.adapters.search import VerificationSearchHit
+from reelagent.verification.trust import (
+    DEFAULT_AUTHORITATIVE_DOMAINS,
+    AuthoritativeDomain,
+    domains_for_query,
+)
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
@@ -24,81 +26,17 @@ _DOC_PATH_MARKERS = ("/docs/", "/documentation/", "/reference/", "/manual/", "/g
 _LOW_VALUE_PATH_MARKERS = ("/about/news/", "/news/", "/blog/", "/events/")
 
 
-@dataclass(frozen=True)
-class AuthoritativeDomain:
-    name: str
-    hosts: tuple[str, ...]
-    keywords: tuple[str, ...]
-    sitemap_urls: tuple[str, ...]
-    source_kind: SourceKind = SourceKind.OFFICIAL
-    search_url_template: str | None = None
-
-
-_DEFAULT_DOMAINS: tuple[AuthoritativeDomain, ...] = (
-    AuthoritativeDomain(
-        name="PostgreSQL",
-        hosts=("postgresql.org", "www.postgresql.org"),
-        keywords=("postgres", "postgresql", "sql", "jsonb", "skip locked"),
-        sitemap_urls=("https://www.postgresql.org/sitemap.xml",),
-        search_url_template="https://www.postgresql.org/search/?q={query}",
-    ),
-    AuthoritativeDomain(
-        name="Apache Kafka",
-        hosts=("kafka.apache.org",),
-        keywords=("kafka", "consumer", "producer", "topic", "partition"),
-        sitemap_urls=("https://kafka.apache.org/sitemap.xml",),
-    ),
-    AuthoritativeDomain(
-        name="Kubernetes",
-        hosts=("kubernetes.io",),
-        keywords=("kubernetes", "k8s", "pod", "deployment", "container"),
-        sitemap_urls=("https://kubernetes.io/sitemap.xml",),
-    ),
-    AuthoritativeDomain(
-        name="Python",
-        hosts=("docs.python.org", "python.org", "www.python.org"),
-        keywords=("python", "cpython", "asyncio", "gil"),
-        sitemap_urls=("https://docs.python.org/3/sitemap.xml",),
-    ),
-    AuthoritativeDomain(
-        name="AWS",
-        hosts=("docs.aws.amazon.com", "aws.amazon.com"),
-        keywords=("aws", "amazon web services", "lambda", "dynamodb", "s3", "ec2"),
-        sitemap_urls=("https://docs.aws.amazon.com/sitemap_index.xml",),
-    ),
-    AuthoritativeDomain(
-        name="Google Cloud",
-        hosts=("cloud.google.com",),
-        keywords=("gcp", "google cloud", "gke", "bigquery", "cloud run"),
-        sitemap_urls=("https://cloud.google.com/sitemap.xml",),
-    ),
-    AuthoritativeDomain(
-        name="OpenJDK",
-        hosts=("openjdk.org", "docs.oracle.com"),
-        keywords=("java", "jdk", "jvm", "openjdk", "virtual threads"),
-        sitemap_urls=("https://openjdk.org/sitemap.xml",),
-    ),
-    AuthoritativeDomain(
-        name="GitHub",
-        hosts=("github.com", "docs.github.com"),
-        keywords=("github", "git", "actions", "pull request"),
-        sitemap_urls=("https://docs.github.com/sitemap.xml",),
-        source_kind=SourceKind.GITHUB,
-    ),
-)
-
-
 class AuthoritativeDomainSearchError(RuntimeError):
     """Raised when curated authoritative-domain retrieval fails unexpectedly."""
 
 
 class AuthoritativeDomainSearchClient:
-    """Search curated official documentation without a general web-search provider."""
+    """Legacy direct-doc retrieval kept until a search provider replaces it."""
 
     def __init__(
         self,
         *,
-        domains: tuple[AuthoritativeDomain, ...] = _DEFAULT_DOMAINS,
+        domains: tuple[AuthoritativeDomain, ...] = DEFAULT_AUTHORITATIVE_DOMAINS,
         timeout_seconds: float = 10.0,
         max_sitemap_urls: int = 5_000,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -111,7 +49,7 @@ class AuthoritativeDomainSearchClient:
     async def search(self, query: str, *, limit: int) -> tuple[VerificationSearchHit, ...]:
         if limit < 1 or limit > 10:
             raise ValueError("limit must be between 1 and 10")
-        selected = _select_domains(query, self._domains)
+        selected = domains_for_query(query, self._domains)
         if not selected:
             return ()
 
@@ -193,18 +131,6 @@ class AuthoritativeDomainSearchClient:
             if len(urls) >= self._max_sitemap_urls:
                 break
         return tuple(urls[: self._max_sitemap_urls])
-
-
-def _select_domains(
-    query: str,
-    domains: Iterable[AuthoritativeDomain],
-) -> tuple[AuthoritativeDomain, ...]:
-    lowered = query.lower()
-    return tuple(
-        domain
-        for domain in domains
-        if any(keyword in lowered for keyword in domain.keywords)
-    )
 
 
 def _tokens(text: str) -> frozenset[str]:
