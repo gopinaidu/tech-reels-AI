@@ -6,6 +6,7 @@ import pytest
 from pydantic import SecretStr
 
 from reelagent.config import Settings
+from reelagent.intelligence.llm_runtime import LlmRuntimeConfigurationError
 from reelagent.topics.models import SourceKind
 from reelagent.verification.adapters import BraveVerificationSearchClient
 from reelagent.verification.runtime import (
@@ -59,11 +60,18 @@ def test_brave_search_handles_missing_web_results() -> None:
     assert asyncio.run(client.search("claim", limit=1)) == ()
 
 
-def test_runtime_default_requires_only_openai_key() -> None:
-    with pytest.raises(VerificationRuntimeConfigurationError, match="OPENAI_API_KEY"):
-        build_verification_pipeline(Settings())
+def test_runtime_default_requires_gemini_key() -> None:
+    settings = Settings(_env_file=None, llm_provider="gemini", gemini_api_key=None)
+    with pytest.raises(LlmRuntimeConfigurationError, match="GEMINI_API_KEY"):
+        build_verification_pipeline(settings)
 
-    pipeline = build_verification_pipeline(Settings(openai_api_key=SecretStr("openai")))
+    pipeline = build_verification_pipeline(
+        Settings(
+            _env_file=None,
+            llm_provider="gemini",
+            gemini_api_key=SecretStr("gemini"),
+        )
+    )
     assert pipeline is not None
 
 
@@ -71,15 +79,20 @@ def test_runtime_requires_brave_key_only_when_enabled() -> None:
     with pytest.raises(VerificationRuntimeConfigurationError, match="BRAVE_SEARCH_API_KEY"):
         build_verification_pipeline(
             Settings(
-                openai_api_key=SecretStr("openai"),
+                _env_file=None,
+                llm_provider="gemini",
+                gemini_api_key=SecretStr("gemini"),
+                brave_search_api_key=SecretStr(""),
                 verification_use_brave=True,
             )
         )
 
     pipeline = build_verification_pipeline(
         Settings(
+            _env_file=None,
+            llm_provider="gemini",
+            gemini_api_key=SecretStr("gemini"),
             brave_search_api_key=SecretStr("brave"),
-            openai_api_key=SecretStr("openai"),
             verification_use_brave=True,
         )
     )
