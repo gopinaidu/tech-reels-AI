@@ -111,7 +111,10 @@ class AuthoritativeDomainSearchClient:
         candidates: list[tuple[int, AuthoritativeDomain, str]] = []
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
             for domain in selected:
-                urls = await self._load_domain_urls(client, domain)
+                try:
+                    urls = await self._load_domain_urls(client, domain)
+                except AuthoritativeDomainSearchError:
+                    continue
                 for url in urls:
                     score = _url_score(url, tokens)
                     if score > 0:
@@ -146,7 +149,13 @@ class AuthoritativeDomainSearchClient:
     ) -> tuple[str, ...]:
         urls: list[str] = []
         for sitemap_url in domain.sitemap_urls:
-            urls.extend(await _read_sitemap(client, sitemap_url, domain.hosts, self._max_sitemap_urls))
+            found = await _read_sitemap(
+                client,
+                sitemap_url,
+                domain.hosts,
+                self._max_sitemap_urls,
+            )
+            urls.extend(found)
             if len(urls) >= self._max_sitemap_urls:
                 break
         return tuple(urls[: self._max_sitemap_urls])
@@ -179,14 +188,22 @@ async def _read_sitemap(
     allowed_hosts: tuple[str, ...],
     limit: int,
 ) -> list[str]:
+    if limit <= 0:
+        return []
     try:
         response = await client.get(sitemap_url)
         response.raise_for_status()
         root = ElementTree.fromstring(response.text)
     except (httpx.HTTPError, ElementTree.ParseError) as exc:
-        raise AuthoritativeDomainSearchError(f"Failed to read sitemap: {sitemap_url}") from exc
+        raise AuthoritativeDomainSearchError(
+            f"Failed to read sitemap: {sitemap_url}"
+        ) from exc
 
-    locations = [element.text.strip() for element in root.iter() if element.tag.endswith("loc") and element.text]
+    locations = [
+        element.text.strip()
+        for element in root.iter()
+        if element.tag.endswith("loc") and element.text
+    ]
     if root.tag.endswith("sitemapindex"):
         urls: list[str] = []
         for child in locations[:5]:
@@ -218,7 +235,8 @@ async def _fetch_snippet(client: httpx.AsyncClient, url: str) -> str:
 
 
 def _title_from_url(url: str) -> str:
-    path = urlparse(url).path.strip("/")
-    tail = path.rsplit("/", 1)[-1] if path else urlparse(url).hostname or "Documentation"
+    parsed = urlparse(url)
+    path = parsed.path.strip("/")
+    tail = path.rsplit("/", 1)[-1] if path else parsed.hostname or "Documentation"
     title = tail.replace("-", " ").replace("_", " ").strip()
     return title[:300] or "Documentation"
