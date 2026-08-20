@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 import httpx
 import pytest
@@ -14,6 +15,22 @@ from reelagent.verification.runtime import (
     VerificationRuntimeConfigurationError,
     build_verification_pipeline,
 )
+
+
+class _StructuredClient:
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.responses = responses
+        self.calls: list[dict[str, Any]] = []
+
+    async def generate_json(
+        self,
+        *,
+        system_prompt: str,
+        input_payload: dict[str, Any],
+        output_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.calls.append(input_payload)
+        return self.responses.pop(0)
 
 
 def test_serper_search_uses_free_tier_query_and_keeps_only_trusted_results() -> None:
@@ -74,6 +91,116 @@ def test_serper_search_uses_free_tier_query_and_keeps_only_trusted_results() -> 
     assert str(hits[0].url).endswith("/docs/current/sql-select.html")
     assert hits[0].source_kind == SourceKind.OFFICIAL
     assert "SKIP LOCKED" in hits[0].snippet
+
+
+def test_serper_uses_llm_query_and_ranking_after_trust_filter() -> None:
+    llm = _StructuredClient(
+        [
+            {"research_query": "Kafka partition ordering documentation"},
+            {"selected_indices": [1, 0]},
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            payload = request.read().decode()
+            assert "Kafka partition ordering documentation" in payload
+            assert "site:" not in payload
+            return httpx.Response(
+                200,
+                json={
+                    "organic": [
+                        {
+                            "title": "Kafka documentation",
+                            "link": "https://kafka.apache.org/documentation/",
+                            "snippet": "General Kafka documentation.",
+                        },
+                        {
+                            "title": "Kafka design",
+                            "link": "https://kafka.apache.org/41/design/design/",
+                            "snippet": "A partition is an ordered sequence of records.",
+                        },
+                        {
+                            "title": "Community answer",
+                            "link": "https://stackoverflow.com/questions/example",
+                            "snippet": "Kafka ordering discussion.",
+                        },
+                    ]
+                },
+            )
+        if "/41/design/design/" in str(request.url):
+            return httpx.Response(
+                200,
+                text="<html><body>A partition is an ordered sequence of records.</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        return httpx.Response(
+            200,
+            text="<html><body>General Kafka documentation.</body></html>",
+            headers={"content-type": "text/html"},
+        )
+
+    client = SerperVerificationSearchClient(
+        api_key=SecretStr("serper-secret"),
+        llm_client=llm,
+        transport=httpx.MockTransport(handler),
+    )
+
+    hits = asyncio.run(
+        client.search("Kafka preserves message ordering within a partition.", limit=1)
+    )
+
+    assert len(hits) == 1
+    assert "/41/design/design/" in str(hits[0].url)
+    assert len(llm.calls) == 2
+    ranking_candidates = llm.calls[1]["candidates"]
+    assert len(ranking_candidates) == 2
+    assert all("stackoverflow.com" not in item["url"] for item in ranking_candidates)
+
+
+def test_serper_llm_failure_falls_back_to_deterministic_query() -> None:
+    class _FailingClient:
+        async def generate_json(
+            self,
+            *,
+            system_prompt: str,
+            input_payload: dict[str, Any],
+            output_schema: dict[str, Any],
+        ) -> dict[str, Any]:
+            raise RuntimeError("temporary model failure")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            payload = request.read().decode()
+            assert "PostgreSQL" in payload
+            assert "documentation" in payload
+            return httpx.Response(
+                200,
+                json={
+                    "organic": [
+                        {
+                            "title": "SELECT",
+                            "link": "https://www.postgresql.org/docs/current/sql-select.html",
+                            "snippet": "SKIP LOCKED documentation.",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            text="<html><body>SKIP LOCKED documentation.</body></html>",
+            headers={"content-type": "text/html"},
+        )
+
+    client = SerperVerificationSearchClient(
+        api_key=SecretStr("serper-secret"),
+        llm_client=_FailingClient(),
+        transport=httpx.MockTransport(handler),
+    )
+
+    hits = asyncio.run(client.search("PostgreSQL SKIP LOCKED", limit=1))
+
+    assert len(hits) == 1
 
 
 def test_serper_extracts_relevant_window_from_long_official_page() -> None:
