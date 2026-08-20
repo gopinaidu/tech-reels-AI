@@ -16,14 +16,17 @@ from reelagent.verification.runtime import (
 )
 
 
-def test_serper_search_uses_site_constraints_and_keeps_only_trusted_results() -> None:
+def test_serper_search_uses_free_tier_query_and_keeps_only_trusted_results() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST":
             assert str(request.url) == "https://google.serper.dev/search"
             assert request.headers["X-API-KEY"] == "serper-secret"
             payload = request.read().decode()
-            assert "PostgreSQL supports SKIP LOCKED" in payload
-            assert "site:postgresql.org" in payload
+            assert "PostgreSQL" in payload
+            assert "skip locked" in payload
+            assert "queue" in payload
+            assert "documentation" in payload
+            assert "site:" not in payload
             return httpx.Response(
                 200,
                 json={
@@ -130,13 +133,21 @@ def test_serper_search_returns_empty_without_known_authoritative_domain() -> Non
     assert asyncio.run(client.search("unknown proprietary widget", limit=3)) == ()
 
 
-def test_serper_search_raises_on_provider_failure() -> None:
+def test_serper_search_surfaces_provider_http_error() -> None:
     client = SerperVerificationSearchClient(
         api_key=SecretStr("serper-secret"),
-        transport=httpx.MockTransport(lambda request: httpx.Response(429)),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                400,
+                json={"message": "Query pattern not allowed for free accounts."},
+            )
+        ),
     )
 
-    with pytest.raises(SerperVerificationSearchError, match="Serper search request failed"):
+    with pytest.raises(
+        SerperVerificationSearchError,
+        match=r"HTTP 400: Query pattern not allowed for free accounts\.",
+    ):
         asyncio.run(client.search("PostgreSQL SKIP LOCKED", limit=1))
 
 
