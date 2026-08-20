@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from reelagent.intelligence.models import TopicBrief
+from reelagent.intelligence.models import Evidence, TopicBrief
 from reelagent.intelligence.quality import TopicQualityDecision, TopicQualityResult
 from reelagent.topics.models import SourceKind
 from reelagent.verification.models import (
@@ -72,8 +72,8 @@ def _independent_authoritative_evidence(
     *,
     brief: TopicBrief,
     request: ClaimVerificationRequest,
-    collected: tuple,
-) -> tuple:
+    collected: tuple[Evidence, ...],
+) -> tuple[Evidence, ...]:
     introducing_urls = {
         str(item.source.url)
         for item in brief.evidence
