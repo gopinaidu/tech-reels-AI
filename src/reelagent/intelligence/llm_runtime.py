@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from reelagent.config import Settings
+from reelagent.intelligence.adapters.gemini import GeminiStructuredLlmClient
+from reelagent.intelligence.adapters.openai import OpenAiStructuredLlmClient
+from reelagent.intelligence.ports import StructuredLlmClient
+
+
+class LlmRuntimeConfigurationError(RuntimeError):
+    """Raised when the configured LLM provider cannot be constructed."""
+
+
+def build_structured_llm_client(
+    settings: Settings,
+    *,
+    model: str,
+) -> StructuredLlmClient:
+    provider: Literal["gemini", "openai"] = settings.llm_provider
+    if provider == "gemini":
+        if settings.gemini_api_key is None:
+            raise LlmRuntimeConfigurationError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
+        return GeminiStructuredLlmClient(api_key=settings.gemini_api_key, model=model)
+    if settings.openai_api_key is None:
+        raise LlmRuntimeConfigurationError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+    return OpenAiStructuredLlmClient(api_key=settings.openai_api_key, model=model)
