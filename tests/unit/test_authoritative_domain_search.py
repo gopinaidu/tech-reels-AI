@@ -51,6 +51,39 @@ def test_authoritative_domain_search_uses_curated_sitemap_and_pages() -> None:
     assert "queue-like" in hits[0].snippet
 
 
+def test_authoritative_domain_search_bounds_snippet_for_evidence_model() -> None:
+    sitemap = """<?xml version='1.0' encoding='UTF-8'?>
+    <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
+      <url><loc>https://docs.example.com/postgresql/skip-locked.html</loc></url>
+    </urlset>
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == "https://docs.example.com/sitemap.xml":
+            return httpx.Response(200, text=sitemap)
+        return httpx.Response(
+            200,
+            text=f"<html><body>{'PostgreSQL documentation. ' * 200}</body></html>",
+            headers={"content-type": "text/html"},
+        )
+
+    domain = AuthoritativeDomain(
+        name="Example Postgres Docs",
+        hosts=("docs.example.com",),
+        keywords=("postgresql", "skip locked"),
+        sitemap_urls=("https://docs.example.com/sitemap.xml",),
+    )
+    client = AuthoritativeDomainSearchClient(
+        domains=(domain,),
+        transport=httpx.MockTransport(handler),
+    )
+
+    hits = asyncio.run(client.search("PostgreSQL SKIP LOCKED", limit=1))
+
+    assert len(hits) == 1
+    assert len(hits[0].snippet) == 2_000
+
+
 def test_authoritative_domain_search_returns_empty_for_unknown_technology() -> None:
     client = AuthoritativeDomainSearchClient(
         domains=(),
