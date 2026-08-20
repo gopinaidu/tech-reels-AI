@@ -17,6 +17,33 @@ _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
 _MAX_PAGE_TEXT_CHARS = 100_000
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
 _MAX_TOKEN_OCCURRENCES = 5
+_SEARCH_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "does",
+        "for",
+        "from",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "supports",
+        "that",
+        "the",
+        "this",
+        "to",
+        "with",
+    }
+)
 
 
 class SerperVerificationSearchError(RuntimeError):
@@ -30,7 +57,7 @@ class SerperVerificationSearchClient:
         self,
         *,
         api_key: SecretStr,
-        timeout_seconds: float = 10.0,
+        timeout_seconds: float = 15.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_key = api_key
@@ -51,12 +78,12 @@ class SerperVerificationSearchClient:
             for domain in domains
             for host in domain.hosts
         }
-        search_query = _build_search_query(query, trusted_hosts)
+        search_query = _build_search_query(query)
         headers = {
             "X-API-KEY": self._api_key.get_secret_value(),
             "Content-Type": "application/json",
         }
-        payload = {"q": search_query, "num": min(max(limit * 3, 10), 30)}
+        payload = {"q": search_query, "num": min(max(limit * 2, 10), 20)}
 
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
             try:
@@ -67,8 +94,19 @@ class SerperVerificationSearchClient:
                 )
                 response.raise_for_status()
                 body = response.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                raise SerperVerificationSearchError("Serper search request failed") from exc
+            except httpx.HTTPStatusError as exc:
+                detail = _response_error_detail(exc.response)
+                raise SerperVerificationSearchError(
+                    f"Serper search returned HTTP {exc.response.status_code}: {detail}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise SerperVerificationSearchError(
+                    f"Serper search request failed: {type(exc).__name__}"
+                ) from exc
+            except ValueError as exc:
+                raise SerperVerificationSearchError(
+                    "Serper search returned invalid JSON"
+                ) from exc
 
             results = body.get("organic", [])
             if not isinstance(results, list):
@@ -108,9 +146,28 @@ class SerperVerificationSearchClient:
         return tuple(hits)
 
 
-def _build_search_query(query: str, hosts: frozenset[str]) -> str:
-    site_terms = " OR ".join(f"site:{host}" for host in sorted(hosts))
-    return f"{query} ({site_terms})"
+def _build_search_query(query: str) -> str:
+    """Build a concise operator-free query compatible with Serper free accounts."""
+
+    tokens = _tokens(query)
+    meaningful = [token for token in tokens if token not in _SEARCH_STOP_WORDS]
+    concise = meaningful[:10]
+    if not concise:
+        return query.strip()
+    return f"{' '.join(concise)} documentation"
+
+
+def _response_error_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        message = body.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()[:300]
+    text = response.text.strip()
+    return text[:300] if text else response.reason_phrase
 
 
 def _tokens(text: str) -> tuple[str, ...]:
