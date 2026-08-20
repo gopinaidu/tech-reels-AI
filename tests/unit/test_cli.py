@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 
+import pytest
 from pydantic import HttpUrl
 
 from reelagent.cli import _print_result, verify_claim
@@ -53,7 +54,12 @@ def _result() -> ClaimVerificationResult:
 def test_verify_claim_builds_manual_request() -> None:
     pipeline = _Pipeline(_result())
 
-    result = asyncio.run(verify_claim("PostgreSQL supports SKIP LOCKED.", pipeline))  # type: ignore[arg-type]
+    result = asyncio.run(
+        verify_claim(
+            "PostgreSQL supports SKIP LOCKED.",
+            pipeline,  # type: ignore[arg-type]
+        )
+    )
 
     assert pipeline.request is not None
     assert pipeline.request.claim_text == "PostgreSQL supports SKIP LOCKED."
@@ -61,13 +67,14 @@ def test_verify_claim_builds_manual_request() -> None:
     assert result.verdict == ClaimVerificationVerdict.SUPPORTED
 
 
-def test_print_result_shows_verdict_reason_and_evidence(capsys: object) -> None:
+def test_print_result_shows_verdict_reason_and_evidence(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     result = _result()
 
     _print_result(result)
 
-    # pytest's capture fixture is intentionally kept out of the application type surface.
-    output = capsys.readouterr().out  # type: ignore[attr-defined]
+    output = capsys.readouterr().out
     assert "Verdict: SUPPORTED" in output
     assert "postgresql.org" in output
     assert "official documentation supports" in output
