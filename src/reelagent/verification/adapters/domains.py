@@ -4,7 +4,7 @@ import html
 import re
 from dataclasses import dataclass
 from typing import Iterable
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -14,6 +14,7 @@ from reelagent.topics.models import SourceKind
 from reelagent.verification.adapters.search import VerificationSearchHit
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 _WS_RE = re.compile(r"\s+")
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
@@ -28,6 +29,7 @@ class AuthoritativeDomain:
     keywords: tuple[str, ...]
     sitemap_urls: tuple[str, ...]
     source_kind: SourceKind = SourceKind.OFFICIAL
+    search_url_template: str | None = None
 
 
 _DEFAULT_DOMAINS: tuple[AuthoritativeDomain, ...] = (
@@ -36,6 +38,7 @@ _DEFAULT_DOMAINS: tuple[AuthoritativeDomain, ...] = (
         hosts=("postgresql.org", "www.postgresql.org"),
         keywords=("postgres", "postgresql", "sql", "jsonb", "skip locked"),
         sitemap_urls=("https://www.postgresql.org/sitemap.xml",),
+        search_url_template="https://www.postgresql.org/search/?q={query}",
     ),
     AuthoritativeDomain(
         name="Apache Kafka",
@@ -114,14 +117,19 @@ class AuthoritativeDomainSearchClient:
         candidates: list[tuple[int, AuthoritativeDomain, str]] = []
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
             for domain in selected:
-                try:
-                    urls = await self._load_domain_urls(client, domain)
-                except AuthoritativeDomainSearchError:
-                    continue
-                for url in urls:
-                    score = _url_score(url, tokens)
-                    if score > 0:
-                        candidates.append((score, domain, url))
+                search_urls = await _read_site_search(client, domain, query)
+                for position, url in enumerate(search_urls):
+                    candidates.append((100 - position, domain, url))
+
+                if not search_urls:
+                    try:
+                        urls = await self._load_domain_urls(client, domain)
+                    except AuthoritativeDomainSearchError:
+                        continue
+                    for url in urls:
+                        score = _url_score(url, tokens)
+                        if score > 0:
+                            candidates.append((score, domain, url))
 
             candidates.sort(key=lambda item: (-item[0], item[2]))
             hits: list[VerificationSearchHit] = []
@@ -190,6 +198,35 @@ def _url_score(url: str, tokens: frozenset[str]) -> int:
     if any(marker in raw_path for marker in _LOW_VALUE_PATH_MARKERS):
         score -= 8
     return score
+
+
+async def _read_site_search(
+    client: httpx.AsyncClient,
+    domain: AuthoritativeDomain,
+    query: str,
+) -> tuple[str, ...]:
+    if domain.search_url_template is None:
+        return ()
+    search_url = domain.search_url_template.format(query=quote_plus(query))
+    try:
+        response = await client.get(search_url, follow_redirects=True)
+        response.raise_for_status()
+    except httpx.HTTPError:
+        return ()
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for href in _HREF_RE.findall(response.text):
+        url = urljoin(search_url, html.unescape(href))
+        if url in seen or not _allowed_url(url, domain.hosts):
+            continue
+        if not any(marker in urlparse(url).path.lower() for marker in _DOC_PATH_MARKERS):
+            continue
+        seen.add(url)
+        urls.append(url)
+        if len(urls) >= 20:
+            break
+    return tuple(urls)
 
 
 async def _read_sitemap(
