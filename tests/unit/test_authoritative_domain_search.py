@@ -93,6 +93,62 @@ def test_authoritative_search_prefers_official_site_search_results() -> None:
     assert "queue-like" in hits[0].snippet
 
 
+def test_site_search_reranks_docs_home_below_matching_documentation() -> None:
+    search_html = """
+    <html><body>
+      <a href="/docs/">Documentation home</a>
+      <a href="/docs/current/sql-select.html">SELECT documentation</a>
+    </body></html>
+    """
+    padding = "general select documentation " * 120
+    relevant = (
+        "SKIP LOCKED skips rows that cannot be immediately locked and can avoid lock contention "
+        "with multiple consumers accessing a queue-like table."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith("https://www.example.com/search/"):
+            return httpx.Response(200, text=search_html)
+        if url == "https://www.example.com/docs/":
+            return httpx.Response(
+                200,
+                text="<html><body>PostgreSQL documentation home.</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        if url.endswith("/docs/current/sql-select.html"):
+            return httpx.Response(
+                200,
+                text=f"<html><body>{padding}{relevant}</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        raise AssertionError(f"unexpected request: {url}")
+
+    domain = AuthoritativeDomain(
+        name="Example PostgreSQL",
+        hosts=("www.example.com",),
+        keywords=("postgresql", "skip locked"),
+        sitemap_urls=("https://www.example.com/sitemap.xml",),
+        search_url_template="https://www.example.com/search/?q={query}",
+    )
+    client = AuthoritativeDomainSearchClient(
+        domains=(domain,),
+        transport=httpx.MockTransport(handler),
+    )
+
+    hits = asyncio.run(
+        client.search(
+            "PostgreSQL supports SKIP LOCKED for queue-style worker coordination",
+            limit=1,
+        )
+    )
+
+    assert len(hits) == 1
+    assert str(hits[0].url).endswith("/docs/current/sql-select.html")
+    assert "SKIP LOCKED" in hits[0].snippet
+    assert "queue-like" in hits[0].snippet
+
+
 def test_authoritative_search_falls_back_to_sitemap_when_site_search_fails() -> None:
     sitemap = """<?xml version='1.0' encoding='UTF-8'?>
     <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
