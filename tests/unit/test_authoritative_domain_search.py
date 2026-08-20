@@ -51,6 +51,45 @@ def test_authoritative_domain_search_uses_curated_sitemap_and_pages() -> None:
     assert "queue-like" in hits[0].snippet
 
 
+def test_authoritative_search_prefers_docs_over_news() -> None:
+    sitemap = """<?xml version='1.0' encoding='UTF-8'?>
+    <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
+      <url><loc>https://www.example.com/about/news/postgresql-release.html</loc></url>
+      <url><loc>https://www.example.com/docs/current/sql-select.html</loc></url>
+    </urlset>
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == "https://www.example.com/sitemap.xml":
+            return httpx.Response(200, text=sitemap)
+        if "/docs/" in str(request.url):
+            body = "SKIP LOCKED avoids contention for consumers accessing a queue-like table."
+        else:
+            body = "PostgreSQL community release news."
+        return httpx.Response(
+            200,
+            text=f"<html><body>{body}</body></html>",
+            headers={"content-type": "text/html"},
+        )
+
+    domain = AuthoritativeDomain(
+        name="Example PostgreSQL",
+        hosts=("www.example.com",),
+        keywords=("postgresql", "skip locked"),
+        sitemap_urls=("https://www.example.com/sitemap.xml",),
+    )
+    client = AuthoritativeDomainSearchClient(
+        domains=(domain,),
+        transport=httpx.MockTransport(handler),
+    )
+
+    hits = asyncio.run(client.search("PostgreSQL SKIP LOCKED queue", limit=1))
+
+    assert len(hits) == 1
+    assert "/docs/current/sql-select.html" in str(hits[0].url)
+    assert "queue-like" in hits[0].snippet
+
+
 def test_authoritative_domain_search_caps_long_page_snippets() -> None:
     sitemap = """<?xml version='1.0' encoding='UTF-8'?>
     <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
