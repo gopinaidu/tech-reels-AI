@@ -19,6 +19,11 @@ class VerificationRuntimeConfigurationError(RuntimeError):
 def build_verification_pipeline(settings: Settings) -> VerificationPipeline:
     """Build the concrete verification pipeline used by the application runtime."""
 
+    structured_client = build_structured_llm_client(
+        settings,
+        model=settings.verification_model,
+    )
+
     search_client: VerificationSearchClient
     if settings.verification_search_provider == "brave":
         if not _has_secret(settings.brave_search_api_key):
@@ -33,15 +38,14 @@ def build_verification_pipeline(settings: Settings) -> VerificationPipeline:
                 "SERPER_API_KEY is required when "
                 "VERIFICATION_SEARCH_PROVIDER=serper"
             )
-        search_client = SerperVerificationSearchClient(api_key=settings.serper_api_key)
+        search_client = SerperVerificationSearchClient(
+            api_key=settings.serper_api_key,
+            llm_client=structured_client,
+        )
 
     evidence_collector = AuthoritativeSearchEvidenceCollector(
         search_client=search_client,
         max_results=settings.verification_search_limit,
-    )
-    structured_client = build_structured_llm_client(
-        settings,
-        model=settings.verification_model,
     )
     verifier = LlmClaimVerifier(client=structured_client)
     return VerificationPipeline(
