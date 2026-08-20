@@ -22,7 +22,9 @@ def build_structured_llm_client(
     provider: Literal["gemini", "openai"] = settings.llm_provider
     if provider == "gemini":
         if not _has_secret(settings.gemini_api_key):
-            raise LlmRuntimeConfigurationError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
+            raise LlmRuntimeConfigurationError(
+                "GEMINI_API_KEY is required when LLM_PROVIDER=gemini"
+            )
         return GeminiStructuredLlmClient(api_key=settings.gemini_api_key, model=model)
     if not _has_secret(settings.openai_api_key):
         raise LlmRuntimeConfigurationError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")

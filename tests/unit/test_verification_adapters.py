@@ -46,7 +46,11 @@ def _request() -> ClaimVerificationRequest:
     )
 
 
-def _hit(kind: SourceKind, url: str, snippet: str = "Relevant documentation.") -> VerificationSearchHit:
+def _hit(
+    kind: SourceKind,
+    url: str,
+    snippet: str = "Relevant documentation.",
+) -> VerificationSearchHit:
     return VerificationSearchHit(
         title="Documentation",
         url=HttpUrl(url),

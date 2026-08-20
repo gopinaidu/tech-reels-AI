@@ -73,7 +73,9 @@ class HackerNewsEvidenceCollector:
                 response.raise_for_status()
                 payload = response.json()
         except (httpx.HTTPError, TypeError, ValueError) as exc:
-            raise HackerNewsEvidenceCollectionError("Hacker News evidence collection failed") from exc
+            raise HackerNewsEvidenceCollectionError(
+                "Hacker News evidence collection failed"
+            ) from exc
 
         if not isinstance(payload, dict):
             raise HackerNewsEvidenceCollectionError("Hacker News item response must be an object")

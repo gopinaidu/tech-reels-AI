@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     topic_intelligence_model: str = "gemini-3.1-flash-lite"
     topic_intelligence_min_score: int = Field(default=65, ge=0, le=100)
     verification_model: str = "gemini-3.1-flash-lite"
+    verification_search_provider: Literal["authoritative", "brave"] = "authoritative"
     verification_search_limit: int = Field(default=5, ge=1, le=10)
-    verification_use_brave: bool = False
 
     tts_provider: str | None = None
     tts_api_key: SecretStr | None = None

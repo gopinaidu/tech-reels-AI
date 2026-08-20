@@ -20,10 +20,11 @@ def build_verification_pipeline(settings: Settings) -> VerificationPipeline:
     """Build the concrete verification pipeline used by the application runtime."""
 
     search_client: VerificationSearchClient
-    if settings.verification_use_brave:
+    if settings.verification_search_provider == "brave":
         if not _has_secret(settings.brave_search_api_key):
             raise VerificationRuntimeConfigurationError(
-                "BRAVE_SEARCH_API_KEY is required when VERIFICATION_USE_BRAVE=true"
+                "BRAVE_SEARCH_API_KEY is required when "
+                "VERIFICATION_SEARCH_PROVIDER=brave"
             )
         search_client = BraveVerificationSearchClient(api_key=settings.brave_search_api_key)
     else:
