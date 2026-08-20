@@ -17,6 +17,8 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
+_DOC_PATH_MARKERS = ("/docs/", "/documentation/", "/reference/", "/manual/", "/guide/")
+_LOW_VALUE_PATH_MARKERS = ("/about/news/", "/news/", "/blog/", "/events/")
 
 
 @dataclass(frozen=True)
@@ -93,7 +95,7 @@ class AuthoritativeDomainSearchClient:
         *,
         domains: tuple[AuthoritativeDomain, ...] = _DEFAULT_DOMAINS,
         timeout_seconds: float = 10.0,
-        max_sitemap_urls: int = 500,
+        max_sitemap_urls: int = 5_000,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._domains = domains
@@ -179,8 +181,15 @@ def _tokens(text: str) -> frozenset[str]:
 
 
 def _url_score(url: str, tokens: frozenset[str]) -> int:
-    lowered = url.lower().replace("-", " ").replace("_", " ").replace("/", " ")
-    return sum(1 for token in tokens if token in lowered)
+    parsed = urlparse(url)
+    path = parsed.path.lower().replace("-", " ").replace("_", " ").replace("/", " ")
+    score = sum(2 for token in tokens if token in path)
+    raw_path = parsed.path.lower()
+    if any(marker in raw_path for marker in _DOC_PATH_MARKERS):
+        score += 8
+    if any(marker in raw_path for marker in _LOW_VALUE_PATH_MARKERS):
+        score -= 8
+    return score
 
 
 async def _read_sitemap(
@@ -207,7 +216,7 @@ async def _read_sitemap(
     ]
     if root.tag.endswith("sitemapindex"):
         urls: list[str] = []
-        for child in locations[:5]:
+        for child in locations[:10]:
             urls.extend(await _read_sitemap(client, child, allowed_hosts, limit - len(urls)))
             if len(urls) >= limit:
                 break
