@@ -8,7 +8,7 @@ import httpx
 from pydantic import HttpUrl, SecretStr
 
 from reelagent.verification.adapters.search import VerificationSearchHit
-from reelagent.verification.trust import domains_for_query, is_trusted_url
+from reelagent.verification.trust import AuthoritativeDomain, domains_for_query, is_trusted_url
 
 _SERPER_SEARCH_URL = "https://google.serper.dev/search"
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -17,6 +17,31 @@ _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
 _MAX_PAGE_TEXT_CHARS = 100_000
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
 _MAX_TOKEN_OCCURRENCES = 5
+_MAX_SEARCH_TERMS = 8
+_SEARCH_STOP_WORDS = frozenset(
+    {
+        "and",
+        "are",
+        "can",
+        "does",
+        "for",
+        "from",
+        "has",
+        "have",
+        "into",
+        "its",
+        "that",
+        "the",
+        "their",
+        "this",
+        "through",
+        "with",
+        "supports",
+        "support",
+        "using",
+        "used",
+    }
+)
 
 
 class SerperVerificationSearchError(RuntimeError):
@@ -51,12 +76,12 @@ class SerperVerificationSearchClient:
             for domain in domains
             for host in domain.hosts
         }
-        search_query = _build_search_query(query, trusted_hosts)
+        search_query = _build_search_query(query, domains)
         headers = {
             "X-API-KEY": self._api_key.get_secret_value(),
             "Content-Type": "application/json",
         }
-        payload = {"q": search_query, "num": min(max(limit * 3, 10), 30)}
+        payload = {"q": search_query, "num": min(max(limit * 2, 10), 20)}
 
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
             try:
@@ -67,8 +92,19 @@ class SerperVerificationSearchClient:
                 )
                 response.raise_for_status()
                 body = response.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                raise SerperVerificationSearchError("Serper search request failed") from exc
+            except httpx.HTTPStatusError as exc:
+                detail = _response_detail(exc.response)
+                raise SerperVerificationSearchError(
+                    f"Serper search returned HTTP {exc.response.status_code}: {detail}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise SerperVerificationSearchError(
+                    f"Serper search transport failed: {type(exc).__name__}"
+                ) from exc
+            except ValueError as exc:
+                raise SerperVerificationSearchError(
+                    "Serper search returned invalid JSON"
+                ) from exc
 
             results = body.get("organic", [])
             if not isinstance(results, list):
@@ -108,9 +144,47 @@ class SerperVerificationSearchClient:
         return tuple(hits)
 
 
-def _build_search_query(query: str, hosts: frozenset[str]) -> str:
-    site_terms = " OR ".join(f"site:{host}" for host in sorted(hosts))
-    return f"{query} ({site_terms})"
+def _build_search_query(
+    query: str,
+    domains: tuple[AuthoritativeDomain, ...],
+) -> str:
+    terms: list[str] = []
+    seen: set[str] = set()
+
+    for domain in domains:
+        _append_search_term(domain.name, terms, seen)
+
+    for token in _WORD_RE.findall(query.lower().replace("-", " ")):
+        if len(token) < 3 or token in _SEARCH_STOP_WORDS or token in seen:
+            continue
+        _append_search_term(token, terms, seen)
+        if len(terms) >= _MAX_SEARCH_TERMS:
+            break
+
+    _append_search_term("documentation", terms, seen)
+    return " ".join(terms)
+
+
+def _append_search_term(term: str, terms: list[str], seen: set[str]) -> None:
+    normalized = term.strip().lower()
+    if not normalized or normalized in seen:
+        return
+    seen.add(normalized)
+    terms.append(term.strip())
+
+
+def _response_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        text = response.text.strip()
+        return text[:300] or "no response body"
+
+    if isinstance(payload, dict):
+        message = payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()[:300]
+    return response.text.strip()[:300] or "no response body"
 
 
 def _tokens(text: str) -> tuple[str, ...]:
