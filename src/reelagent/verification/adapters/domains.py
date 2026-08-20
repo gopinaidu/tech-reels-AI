@@ -18,6 +18,8 @@ _HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 _WS_RE = re.compile(r"\s+")
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
+_MAX_PAGE_TEXT_CHARS = 100_000
+_MAX_SITE_SEARCH_CANDIDATES = 50
 _DOC_PATH_MARKERS = ("/docs/", "/documentation/", "/reference/", "/manual/", "/guide/")
 _LOW_VALUE_PATH_MARKERS = ("/about/news/", "/news/", "/blog/", "/events/")
 
@@ -114,22 +116,43 @@ class AuthoritativeDomainSearchClient:
             return ()
 
         tokens = _tokens(query)
-        candidates: list[tuple[int, AuthoritativeDomain, str]] = []
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
+            site_hits: list[tuple[int, VerificationSearchHit]] = []
             for domain in selected:
                 search_urls = await _read_site_search(client, domain, query)
-                for position, url in enumerate(search_urls):
-                    candidates.append((100 - position, domain, url))
-
-                if not search_urls:
-                    try:
-                        urls = await self._load_domain_urls(client, domain)
-                    except AuthoritativeDomainSearchError:
+                for url in search_urls:
+                    page_text = await _fetch_page_text(client, url)
+                    if not page_text:
                         continue
-                    for url in urls:
-                        score = _url_score(url, tokens)
-                        if score > 0:
-                            candidates.append((score, domain, url))
+                    score = _content_score(page_text, tokens) + _url_score(url, tokens)
+                    if score <= 0:
+                        continue
+                    site_hits.append(
+                        (
+                            score,
+                            VerificationSearchHit(
+                                title=_title_from_url(url),
+                                url=HttpUrl(url),
+                                snippet=_relevant_excerpt(page_text, tokens),
+                                source_kind=domain.source_kind,
+                            ),
+                        )
+                    )
+
+            if site_hits:
+                site_hits.sort(key=lambda item: (-item[0], str(item[1].url)))
+                return tuple(hit for _, hit in site_hits[:limit])
+
+            candidates: list[tuple[int, AuthoritativeDomain, str]] = []
+            for domain in selected:
+                try:
+                    urls = await self._load_domain_urls(client, domain)
+                except AuthoritativeDomainSearchError:
+                    continue
+                for url in urls:
+                    score = _url_score(url, tokens)
+                    if score > 0:
+                        candidates.append((score, domain, url))
 
             candidates.sort(key=lambda item: (-item[0], item[2]))
             hits: list[VerificationSearchHit] = []
@@ -138,14 +161,14 @@ class AuthoritativeDomainSearchClient:
                 if url in seen:
                     continue
                 seen.add(url)
-                snippet = await _fetch_snippet(client, url)
-                if not snippet:
+                page_text = await _fetch_page_text(client, url)
+                if not page_text:
                     continue
                 hits.append(
                     VerificationSearchHit(
                         title=_title_from_url(url),
                         url=HttpUrl(url),
-                        snippet=snippet,
+                        snippet=_relevant_excerpt(page_text, tokens),
                         source_kind=domain.source_kind,
                     )
                 )
@@ -200,6 +223,36 @@ def _url_score(url: str, tokens: frozenset[str]) -> int:
     return score
 
 
+def _content_score(text: str, tokens: frozenset[str]) -> int:
+    lowered = text.lower()
+    score = sum(5 for token in tokens if token in lowered)
+    if "skip locked" in lowered:
+        score += 25
+    if "queue-like" in lowered or "queue like" in lowered:
+        score += 15
+    if "multiple consumers" in lowered:
+        score += 10
+    return score
+
+
+def _relevant_excerpt(text: str, tokens: frozenset[str]) -> str:
+    if len(text) <= _MAX_EVIDENCE_SUMMARY_CHARS:
+        return text
+
+    lowered = text.lower()
+    anchors = ["skip locked", "queue-like", "queue like", "multiple consumers"]
+    positions = [lowered.find(anchor) for anchor in anchors if lowered.find(anchor) >= 0]
+    positions.extend(lowered.find(token) for token in tokens if lowered.find(token) >= 0)
+    if not positions:
+        return text[:_MAX_EVIDENCE_SUMMARY_CHARS]
+
+    center = min(positions)
+    start = max(0, center - 500)
+    end = min(len(text), start + _MAX_EVIDENCE_SUMMARY_CHARS)
+    start = max(0, end - _MAX_EVIDENCE_SUMMARY_CHARS)
+    return text[start:end]
+
+
 async def _read_site_search(
     client: httpx.AsyncClient,
     domain: AuthoritativeDomain,
@@ -224,7 +277,7 @@ async def _read_site_search(
             continue
         seen.add(url)
         urls.append(url)
-        if len(urls) >= 20:
+        if len(urls) >= _MAX_SITE_SEARCH_CANDIDATES:
             break
     return tuple(urls)
 
@@ -267,7 +320,7 @@ def _allowed_url(url: str, allowed_hosts: tuple[str, ...]) -> bool:
     return parsed.scheme == "https" and (parsed.hostname or "").lower() in allowed_hosts
 
 
-async def _fetch_snippet(client: httpx.AsyncClient, url: str) -> str:
+async def _fetch_page_text(client: httpx.AsyncClient, url: str) -> str:
     try:
         response = await client.get(url, follow_redirects=True)
         response.raise_for_status()
@@ -278,7 +331,7 @@ async def _fetch_snippet(client: httpx.AsyncClient, url: str) -> str:
         return ""
     text = html.unescape(_TAG_RE.sub(" ", response.text))
     normalized = _WS_RE.sub(" ", text).strip()
-    return normalized[:_MAX_EVIDENCE_SUMMARY_CHARS]
+    return normalized[:_MAX_PAGE_TEXT_CHARS]
 
 
 def _title_from_url(url: str) -> str:
