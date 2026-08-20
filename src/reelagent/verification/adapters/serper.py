@@ -16,6 +16,7 @@ _WS_RE = re.compile(r"\s+")
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_.+-]*")
 _MAX_PAGE_TEXT_CHARS = 100_000
 _MAX_EVIDENCE_SUMMARY_CHARS = 2_000
+_MAX_TOKEN_OCCURRENCES = 5
 
 
 class SerperVerificationSearchError(RuntimeError):
@@ -81,7 +82,7 @@ class SerperVerificationSearchClient:
                     continue
                 url = item.get("link")
                 title = item.get("title")
-                if not isinstance(url, str) or not isinstance(title, str):
+                if not isinstance(url, str) or not isinstance(title, str) or not title.strip():
                     continue
                 if url in seen or not is_trusted_url(url, trusted_hosts):
                     continue
@@ -95,9 +96,9 @@ class SerperVerificationSearchClient:
                 host = (urlparse(url).hostname or "").lower()
                 hits.append(
                     VerificationSearchHit(
-                        title=title[:300],
+                        title=title.strip()[:300],
                         url=HttpUrl(url),
-                        snippet=snippet[:_MAX_EVIDENCE_SUMMARY_CHARS],
+                        snippet=snippet.strip()[:_MAX_EVIDENCE_SUMMARY_CHARS],
                         source_kind=source_kinds[host],
                     )
                 )
@@ -140,14 +141,28 @@ async def _fetch_page_text(client: httpx.AsyncClient, url: str) -> str:
 def _relevant_excerpt(text: str, tokens: tuple[str, ...]) -> str:
     if len(text) <= _MAX_EVIDENCE_SUMMARY_CHARS:
         return text
-
-    lowered = text.lower()
-    positions = [lowered.find(token) for token in tokens if lowered.find(token) >= 0]
-    if not positions:
+    if not tokens:
         return text[:_MAX_EVIDENCE_SUMMARY_CHARS]
 
-    center = min(positions)
-    start = max(0, center - 400)
-    end = min(len(text), start + _MAX_EVIDENCE_SUMMARY_CHARS)
-    start = max(0, end - _MAX_EVIDENCE_SUMMARY_CHARS)
-    return text[start:end]
+    lowered = text.lower()
+    candidates: list[tuple[int, int]] = []
+    for token in tokens:
+        search_from = 0
+        for _ in range(_MAX_TOKEN_OCCURRENCES):
+            position = lowered.find(token, search_from)
+            if position < 0:
+                break
+            start = max(0, position - 500)
+            end = min(len(text), start + _MAX_EVIDENCE_SUMMARY_CHARS)
+            window = lowered[start:end]
+            score = sum(1 for query_token in tokens if query_token in window)
+            candidates.append((score, start))
+            search_from = position + len(token)
+
+    if not candidates:
+        return text[:_MAX_EVIDENCE_SUMMARY_CHARS]
+
+    _, best_start = max(candidates, key=lambda item: (item[0], item[1]))
+    best_end = min(len(text), best_start + _MAX_EVIDENCE_SUMMARY_CHARS)
+    best_start = max(0, best_end - _MAX_EVIDENCE_SUMMARY_CHARS)
+    return text[best_start:best_end]
