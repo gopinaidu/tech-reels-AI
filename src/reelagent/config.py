@@ -35,8 +35,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
+    brave_search_api_key: SecretStr | None = None
     topic_intelligence_model: str = "gpt-5.6-luna"
     topic_intelligence_min_score: int = Field(default=65, ge=0, le=100)
+    verification_model: str = "gpt-5.6-luna"
+    verification_search_limit: int = Field(default=5, ge=1, le=10)
 
     tts_provider: str | None = None
     tts_api_key: SecretStr | None = None
