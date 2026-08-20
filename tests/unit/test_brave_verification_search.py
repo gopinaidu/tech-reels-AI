@@ -60,19 +60,15 @@ def test_brave_search_handles_missing_web_results() -> None:
     assert asyncio.run(client.search("claim", limit=1)) == ()
 
 
-def test_runtime_default_requires_gemini_key() -> None:
-    settings = Settings(_env_file=None, llm_provider="gemini", gemini_api_key=None)
+def test_runtime_requires_gemini_key_when_search_is_configured() -> None:
+    settings = Settings(
+        _env_file=None,
+        llm_provider="gemini",
+        gemini_api_key=None,
+        serper_api_key=SecretStr("serper"),
+    )
     with pytest.raises(LlmRuntimeConfigurationError, match="GEMINI_API_KEY"):
         build_verification_pipeline(settings)
-
-    pipeline = build_verification_pipeline(
-        Settings(
-            _env_file=None,
-            llm_provider="gemini",
-            gemini_api_key=SecretStr("gemini"),
-        )
-    )
-    assert pipeline is not None
 
 
 def test_runtime_requires_brave_key_only_for_brave_provider() -> None:

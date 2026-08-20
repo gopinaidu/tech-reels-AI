@@ -3,10 +3,10 @@ from __future__ import annotations
 from reelagent.config import Settings
 from reelagent.intelligence.llm_runtime import _has_secret, build_structured_llm_client
 from reelagent.verification.adapters import (
-    AuthoritativeDomainSearchClient,
     AuthoritativeSearchEvidenceCollector,
     BraveVerificationSearchClient,
     LlmClaimVerifier,
+    SerperVerificationSearchClient,
     VerificationSearchClient,
 )
 from reelagent.verification.pipeline import VerificationPipeline
@@ -28,7 +28,12 @@ def build_verification_pipeline(settings: Settings) -> VerificationPipeline:
             )
         search_client = BraveVerificationSearchClient(api_key=settings.brave_search_api_key)
     else:
-        search_client = AuthoritativeDomainSearchClient()
+        if not _has_secret(settings.serper_api_key):
+            raise VerificationRuntimeConfigurationError(
+                "SERPER_API_KEY is required when "
+                "VERIFICATION_SEARCH_PROVIDER=serper"
+            )
+        search_client = SerperVerificationSearchClient(api_key=settings.serper_api_key)
 
     evidence_collector = AuthoritativeSearchEvidenceCollector(
         search_client=search_client,
