@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from reelagent.config import Settings
-from reelagent.intelligence.llm_runtime import build_structured_llm_client
+from reelagent.intelligence.llm_runtime import _has_secret, build_structured_llm_client
 from reelagent.verification.adapters import (
     AuthoritativeDomainSearchClient,
     AuthoritativeSearchEvidenceCollector,
@@ -21,7 +21,7 @@ def build_verification_pipeline(settings: Settings) -> VerificationPipeline:
 
     search_client: VerificationSearchClient
     if settings.verification_use_brave:
-        if settings.brave_search_api_key is None:
+        if not _has_secret(settings.brave_search_api_key):
             raise VerificationRuntimeConfigurationError(
                 "BRAVE_SEARCH_API_KEY is required when VERIFICATION_USE_BRAVE=true"
             )
