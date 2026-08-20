@@ -73,6 +73,51 @@ def test_serper_search_uses_site_constraints_and_keeps_only_trusted_results() ->
     assert "SKIP LOCKED" in hits[0].snippet
 
 
+def test_serper_extracts_relevant_window_from_long_official_page() -> None:
+    padding = "PostgreSQL documentation navigation and general reference. " * 120
+    relevant = (
+        "SKIP LOCKED can avoid lock contention with multiple consumers accessing "
+        "a queue-like table for worker coordination."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                json={
+                    "organic": [
+                        {
+                            "title": "SELECT",
+                            "link": "https://www.postgresql.org/docs/current/sql-select.html",
+                            "snippet": "SELECT reference.",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            text=f"<html><body>{padding}{relevant}</body></html>",
+            headers={"content-type": "text/html"},
+        )
+
+    client = SerperVerificationSearchClient(
+        api_key=SecretStr("serper-secret"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    hits = asyncio.run(
+        client.search(
+            "PostgreSQL supports SKIP LOCKED for queue-style worker coordination.",
+            limit=1,
+        )
+    )
+
+    assert len(hits) == 1
+    assert "SKIP LOCKED" in hits[0].snippet
+    assert "worker coordination" in hits[0].snippet
+    assert len(hits[0].snippet) <= 2_000
+
+
 def test_serper_search_returns_empty_without_known_authoritative_domain() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("Serper must not be called for an unknown source family")
