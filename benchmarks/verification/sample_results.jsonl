@@ -1,0 +1,2 @@
+{"id":"kafka-001","verdict":"SUPPORTED","source_domains":["kafka.apache.org"],"evidence_found":true,"relevant_passage_found":true,"search_calls":1,"latency_ms":1200,"input_tokens":800,"output_tokens":120}
+{"id":"kafka-002","verdict":"CONTRADICTED","source_domains":["kafka.apache.org"],"evidence_found":true,"relevant_passage_found":true,"search_calls":1,"latency_ms":1100,"input_tokens":760,"output_tokens":115}
