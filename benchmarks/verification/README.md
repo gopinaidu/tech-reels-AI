@@ -23,16 +23,20 @@ This benchmark measures ReelAgent's technical-claim verification pipeline before
 
 ## Baseline run
 
-The first benchmark run should use ReelAgent's existing verification pipeline unchanged. A baseline result should record at least:
+Experiment 0 uses ReelAgent's existing verification pipeline unchanged through `reelagent.verification.benchmark:verify_claim`.
 
-- benchmark claim id
-- query used
-- returned sources/domains
-- selected evidence
-- verifier verdict
-- search-call count
-- latency, when available
-- token usage, when available
+The same local environment variables used by the application are required, including the configured LLM provider key and verification search provider key. The adapter intentionally does not add retries, alternate queries, or benchmark-specific retrieval behavior.
+
+```bash
+python benchmarks/verification/run_baseline.py \
+  --claims benchmarks/verification/claims.jsonl \
+  --adapter reelagent.verification.benchmark:verify_claim \
+  --output benchmark_results/verification/baseline.jsonl
+```
+
+For a cheap configuration check before running all 30 paid claims, add `--limit 1`.
+
+The adapter records returned source domains, selected evidence, verifier verdict, and rationale. Metrics that the current runtime does not expose reliably (for example token counts, the generated research query, or whether evidence text originated from the fetched page versus the search snippet) are deliberately left unreported rather than inferred.
 
 Save baseline outputs as JSONL so later experiments can be compared claim-by-claim.
 
